@@ -1,0 +1,691 @@
+#include "llvm/Pass.h"
+#include "llvm/IR/Function.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/InstrTypes.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/IR/Module.h"
+#include <llvm/IR/BasicBlock.h>
+#include <llvm/IR/CallingConv.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/DerivedTypes.h>
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
+
+#include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/LoopInfoImpl.h"
+#include <iostream>
+using namespace llvm;
+
+namespace {
+  struct InjectorPass : public FunctionPass {
+    static char ID;
+    InjectorPass() : FunctionPass(ID) {}
+
+  virtual bool runOnFunction(Function& F){
+        // Get the function to call from our runtime library.
+          if(F.getName().str().find("testFunction")!=std::string::npos) {
+              //F.dump();
+
+        auto mod = F.getParent();
+        LLVMContext &Ctx = F.getContext();
+        std::vector<Type*>logop_args;
+         logop_args.push_back(IntegerType::get(Ctx, 32));
+        FunctionType* logop_ftype = FunctionType::get(Type::getVoidTy(Ctx), logop_args, false);
+        //Constant *logopFunc = F.getParent()->getOrInsertFunction("logop", logop_ftype);
+
+        Function* logopFunc = F.getParent()->getFunction("logop"); // _Z5logopi
+         if (!logopFunc) {
+         logopFunc = Function::Create(
+          /*Type=*/logop_ftype,
+          /*Linkage=*/GlobalValue::ExternalLinkage,
+          /*Name=*/"logop", F.getParent());
+         logopFunc->setCallingConv(CallingConv::C);
+         }
+         //std::cout << "func name = " << logopFunc->getName().str() << std::endl;
+
+        std::vector<Type*>retdouble_args;
+         retdouble_args.push_back(IntegerType::get(Ctx, 32));
+        FunctionType* retdouble_ftype = FunctionType::get(IntegerType::get(Ctx, 32), retdouble_args, false);
+      //Constant *doubleFunc = F.getParent()->getOrInsertFunction("retDouble", retdouble_ftype);
+        Function* doubleFunc = F.getParent()->getFunction("retDouble"); // _Z9retDoublei
+         if (!doubleFunc) {
+         doubleFunc = Function::Create(
+          /*Type=*/retdouble_ftype,
+          /*Linkage=*/GlobalValue::ExternalLinkage,
+          /*Name=*/"retDouble", F.getParent());
+         doubleFunc->setCallingConv(CallingConv::C);
+         }
+
+         // Function signature for metric_capture_setup
+         PointerType* PointerTy_1 = PointerType::get(IntegerType::get(mod->getContext(), 8), 0);
+         ConstantInt* const_int32_64 = ConstantInt::get(mod->getContext(), APInt(32, StringRef("0"), 10));
+
+         StructType *StructTy_class_std__basic_string = mod->getTypeByName("class.std::basic_string");
+         if (!StructTy_class_std__basic_string) {
+         StructTy_class_std__basic_string = StructType::create(mod->getContext(), "class.std::basic_string");
+         }
+         std::vector<Type*>StructTy_class_std__basic_string_fields;
+         StructType *StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider = mod->getTypeByName("struct.std::basic_string<char, std::char_traits<char>, std::allocator<char> >::_Alloc_hider");
+         if (!StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider) {
+         StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider = StructType::create(mod->getContext(), "struct.std::basic_string<char, std::char_traits<char>, std::allocator<char> >::_Alloc_hider");
+         }
+         std::vector<Type*>StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields;
+         StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields.push_back(PointerTy_1);
+         if (StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider->isOpaque()) {
+         StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider->setBody(StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields, /*isPacked=*/false);
+         }
+
+         StructTy_class_std__basic_string_fields.push_back(StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider);
+         if (StructTy_class_std__basic_string->isOpaque()) {
+         StructTy_class_std__basic_string->setBody(StructTy_class_std__basic_string_fields, /*isPacked=*/false);
+         }
+
+         PointerType* PointerTy_25 = PointerType::get(StructTy_class_std__basic_string, 0);
+
+
+         StructType *StructTy_class_IWrapper = mod->getTypeByName("class.IWrapper");
+         if (!StructTy_class_IWrapper) {
+         StructTy_class_IWrapper = StructType::create(mod->getContext(), "class.IWrapper");
+         }
+         std::vector<Type*>StructTy_class_IWrapper_fields;
+         std::vector<Type*>FuncTy_36_args;
+         FunctionType* FuncTy_36 = FunctionType::get(
+          /*Result=*/IntegerType::get(mod->getContext(), 32),
+          /*Params=*/FuncTy_36_args,
+          /*isVarArg=*/true);
+
+         PointerType* PointerTy_35 = PointerType::get(FuncTy_36, 0);
+
+         PointerType* PointerTy_34 = PointerType::get(PointerTy_35, 0);
+
+         StructTy_class_IWrapper_fields.push_back(PointerTy_34);
+         if (StructTy_class_IWrapper->isOpaque()) {
+         StructTy_class_IWrapper->setBody(StructTy_class_IWrapper_fields, /*isPacked=*/false);
+         }
+
+         PointerType* PointerTy_33 = PointerType::get(StructTy_class_IWrapper, 0);
+
+          std::vector<Type*>FuncTy_30_args;
+          FuncTy_30_args.push_back(PointerTy_25);
+          FuncTy_30_args.push_back(PointerTy_25);
+          FuncTy_30_args.push_back(IntegerType::get(Ctx, 32));
+          //FuncTy_30_args.push_back(IntegerType::get(mod->getContext(), 32));
+          FunctionType* FuncTy_30 = FunctionType::get(
+           /*Result=*/PointerTy_33,
+           /*Params=*/FuncTy_30_args,
+           /*isVarArg=*/false);
+
+
+          Function* func__Z40_metric_capture_long_double_timer_setup_RSsS_ =
+                  mod->getFunction("_metric_capture_long_double_timer_setup_"); //_Z40_metric_capture_long_double_timer_setup_RSsS_
+          if (!func__Z40_metric_capture_long_double_timer_setup_RSsS_) {
+          func__Z40_metric_capture_long_double_timer_setup_RSsS_ = Function::Create(
+           /*Type=*/FuncTy_30,
+           /*Linkage=*/GlobalValue::ExternalLinkage,
+           /*Name=*/"_metric_capture_long_double_timer_setup_", mod); // (external, no body)
+          func__Z40_metric_capture_long_double_timer_setup_RSsS_->setCallingConv(CallingConv::C);
+          }
+
+          std::vector<Type*>FuncTy_44_args;
+           FuncTy_44_args.push_back(PointerTy_33);
+           FuncTy_44_args.push_back(IntegerType::get(mod->getContext(), 32));
+           FunctionType* FuncTy_44 = FunctionType::get(
+            /*Result=*/Type::getVoidTy(mod->getContext()),
+            /*Params=*/FuncTy_44_args,
+            /*isVarArg=*/false);
+
+
+           Function* func__Z22_metric_capture_start_P8IWrapperi = mod->getFunction("_metric_capture_start_"); //_Z22_metric_capture_start_P8IWrapperi
+           if (!func__Z22_metric_capture_start_P8IWrapperi) {
+           func__Z22_metric_capture_start_P8IWrapperi = Function::Create(
+            /*Type=*/FuncTy_44,
+            /*Linkage=*/GlobalValue::ExternalLinkage,
+            /*Name=*/"_metric_capture_start_", mod); // (external, no body)
+           func__Z22_metric_capture_start_P8IWrapperi->setCallingConv(CallingConv::C);
+           }
+
+           Function* func__Z21_metric_capture_stop_P8IWrapperi = mod->getFunction("_metric_capture_stop_"); //_Z21_metric_capture_stop_P8IWrapperi
+           if (!func__Z21_metric_capture_stop_P8IWrapperi) {
+           func__Z21_metric_capture_stop_P8IWrapperi = Function::Create(
+            /*Type=*/FuncTy_44,
+            /*Linkage=*/GlobalValue::ExternalLinkage,
+            /*Name=*/"_metric_capture_stop_", mod); // (external, no body)
+           func__Z21_metric_capture_stop_P8IWrapperi->setCallingConv(CallingConv::C);
+           }
+
+        if(!logopFunc)
+          std::cout << "logop not found" << std::endl;
+    if(!doubleFunc)
+        std::cout << "doubleFunc not found" << std::endl;
+  /*
+    ExecutionEngine* engine = EngineBuilder(F.getParent()).create();
+    engine->addGlobalMapping(logopFunc, &::logop); // LLVM always takes non-const pointers
+    engine->addGlobalMapping(doubleFunc, &::retDouble);*/
+
+      /*Constant *getTimeFunc = F.getParent()->getOrInsertFunction(
+          "getTime", PointerType::getInt8PtrTy(Ctx), NULL
+        );*/
+
+      /*Constant *logFunc = F.getParent()->getOrInsertFunction(
+          "log", Type::getVoidTy(Ctx), PointerType::getInt8PtrTy(Ctx), NULL
+        );*/
+
+
+    IRBuilder<> builder(F.begin()->begin());
+    builder.SetInsertPoint(&*(F.begin()), builder.GetInsertPoint());
+
+    Constant* ptr_fileName_constant = ConstantDataArray::getString(Ctx, F.getParent()->getName());
+    Constant* ptr_funcName_constant = ConstantDataArray::getString(Ctx, F.getName());
+
+    AllocaInst* ptr_funcName = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "funcName");
+    //AllocaInst* ptr_funcName = new AllocaInst(StructTy_class_std__basic_string, "funcName",F.begin());
+     ptr_funcName->setAlignment(8);
+
+     AllocaInst* ptr_fileName = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "fileName");
+     //AllocaInst* ptr_fileName = new AllocaInst(StructTy_class_std__basic_string, "fileName", F.begin());
+      ptr_fileName->setAlignment(8);
+    // Create Arraytype for global variable that will hold the constant string which is the function name
+    ArrayType* ArrayTy_2 = ArrayType::get(IntegerType::get(mod->getContext(), 8), F.getParent()->getName().size()+1);
+    GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*mod,
+    /*Type=*/ArrayTy_2,
+    /*isConstant=*/true,
+    /*Linkage=*/GlobalValue::PrivateLinkage,
+    /*Initializer=*/0, // has initializer, specified below
+    /*Name=*/".str");
+    gvar_array__str->setAlignment(1);
+    // Create Arraytype for global variable that will hold the constant string which is the file name
+    ArrayType* ArrayTy_3 = ArrayType::get(IntegerType::get(mod->getContext(), 8), F.getName().size()+1);
+    GlobalVariable* gvar_array__str1 = new GlobalVariable(/*Module=*/*mod,
+    /*Type=*/ArrayTy_3,
+    /*isConstant=*/true,
+    /*Linkage=*/GlobalValue::PrivateLinkage,
+    /*Initializer=*/0, // has initializer, specified below
+    /*Name=*/".str1");
+    gvar_array__str1->setAlignment(1);
+
+    ConstantInt* const_int64_61 = ConstantInt::get(mod->getContext(), APInt(64, StringRef("0"), 10));
+    std::vector<Constant*> const_ptr_66_indices;
+    const_ptr_66_indices.push_back(const_int64_61);
+    const_ptr_66_indices.push_back(const_int64_61);
+    Constant* const_ptr_67 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str, const_ptr_66_indices);
+    gvar_array__str->setInitializer(ptr_fileName_constant);
+    Constant* const_ptr_66 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str1, const_ptr_66_indices);
+    gvar_array__str1->setInitializer(ptr_funcName_constant);
+
+    StructType *StructTy_class_std__allocator = mod->getTypeByName("class.std::allocator");
+     if (!StructTy_class_std__allocator) {
+     StructTy_class_std__allocator = StructType::create(mod->getContext(), "class.std::allocator");
+     }
+     std::vector<Type*>StructTy_class_std__allocator_fields;
+     StructTy_class_std__allocator_fields.push_back(IntegerType::get(mod->getContext(), 8));
+     if (StructTy_class_std__allocator->isOpaque()) {
+     StructTy_class_std__allocator->setBody(StructTy_class_std__allocator_fields, /*isPacked=*/false);
+     }
+
+     PointerType* PointerTy_27 = PointerType::get(StructTy_class_std__allocator, 0);
+     PointerType* PointerTy_28 = PointerType::get(StructTy_class_std__basic_string, 0);
+
+     std::vector<Type*>FuncTy_31_args;
+      FuncTy_31_args.push_back(PointerTy_28);
+      FuncTy_31_args.push_back(PointerTy_1);
+      FuncTy_31_args.push_back(PointerTy_27);
+      FunctionType* FuncTy_31 = FunctionType::get(
+       /*Result=*/Type::getVoidTy(mod->getContext()),
+       /*Params=*/FuncTy_31_args,
+       /*isVarArg=*/false);
+
+     Function* func__ZNSsC1EPKcRKSaIcE = mod->getFunction("_ZNSsC1EPKcRKSaIcE");
+     if (!func__ZNSsC1EPKcRKSaIcE) {
+     func__ZNSsC1EPKcRKSaIcE = Function::Create(
+      /*Type=*/FuncTy_31,
+      /*Linkage=*/GlobalValue::ExternalLinkage,
+      /*Name=*/"_ZNSsC1EPKcRKSaIcE", mod); // (external, no body)
+     func__ZNSsC1EPKcRKSaIcE->setCallingConv(CallingConv::C);
+     }
+
+     AllocaInst* ptr_ref_tmp = builder.CreateAlloca(StructTy_class_std__allocator, nullptr, "ref.tmp");
+    //AllocaInst* ptr_ref_tmp = new AllocaInst(StructTy_class_std__allocator, "ref.tmp", F.begin());
+    ptr_ref_tmp->setAlignment(1);
+
+    std::vector<Value*> void_95_params;
+     void_95_params.push_back(ptr_funcName);
+     void_95_params.push_back(const_ptr_66);
+     void_95_params.push_back(ptr_ref_tmp);
+     CallInst *void_95 = builder.CreateCall(func__ZNSsC1EPKcRKSaIcE, void_95_params);
+    //CallInst *void_95 = CallInst::Create(func__ZNSsC1EPKcRKSaIcE, void_95_params);
+     void_95->setCallingConv(CallingConv::C);
+
+     AllocaInst* ptr_ref_tmp1 = builder.CreateAlloca(StructTy_class_std__allocator, nullptr, "ref.tmp1");
+     //AllocaInst* ptr_ref_tmp1 = new AllocaInst(StructTy_class_std__allocator, "ref.tmp1", F.begin());
+     ptr_ref_tmp1->setAlignment(1);
+
+     std::vector<Value*> void_96_params;
+      void_96_params.push_back(ptr_fileName);
+      void_96_params.push_back(const_ptr_67);
+      void_96_params.push_back(ptr_ref_tmp1);
+      CallInst *void_96 = builder.CreateCall(func__ZNSsC1EPKcRKSaIcE, void_96_params);
+      //CallInst *void_96 = CallInst::Create(func__ZNSsC1EPKcRKSaIcE, void_96_params);
+      void_96->setCallingConv(CallingConv::C);
+
+     std::vector<Value*> void_91_params;
+     //void_91_params.push_back(ptr_agg_tmp);
+     //void_91_params.push_back(ptr_agg_tmp1);
+     void_91_params.push_back(ptr_fileName);
+     void_91_params.push_back(ptr_funcName);
+     ConstantInt* ptr_loop_count = ConstantInt::get(IntegerType::get(Ctx,32), 5);
+     void_91_params.push_back(ptr_loop_count);
+
+
+        std::cout << "File name = " <<  F.getParent()->getName().str() << std::endl;
+        std::cout << "Function name = " << F.getName().str() << std::endl;
+
+        CallInst* metric_setup_call = builder.CreateCall(func__Z40_metric_capture_long_double_timer_setup_RSsS_, void_91_params);
+
+        //ConstantInt* ptr_loopid_0 = ConstantInt::get(IntegerType::get(Ctx,32), 0);
+        //std::vector<Value*> void_metric_start_args;
+        //void_metric_start_args.push_back(metric_setup_call);
+        //void_metric_start_args.push_back(ptr_loopid_0);
+        //CallInst* metric_start_call = builder.CreateCall(func__Z22_metric_capture_start_P8IWrapperi, void_metric_start_args);
+        //CallInst* metric_stop_call = builder.CreateCall(func__Z21_metric_capture_stop_P8IWrapperi, void_metric_start_args);
+
+        std::cout << "callinst name = " << metric_setup_call->getCalledFunction()->getName().str() << std::endl;
+
+        std::string constantCondString = "cond";
+        std::string constantEndString = "end";
+
+        std::map <BasicBlock*, int > bbmap;
+        int loopIdCounter = 0;
+        for (BasicBlock &B : F) {
+            std::string loopLabel = B.getValueName()->getValue()->getName().str();
+            /*std::cout << "Looplabel = " << loopLabel << " | " << " size = " << loopLabel.size() << std::endl;
+            std::cout << "found for at = " << loopLabel.find("for") << std::endl;
+            std::cout << "found cond at = " << loopLabel.find(constantCondString) << std::endl;*/
+            if((loopLabel.find("for") == 0 ) && (loopLabel.find(constantCondString) != std::string::npos)) {
+                // for.cond has two predecessors usually, the node that leads to the condition and the for.inc.
+                // Therefore we can not use getUniquePredecessor. Instead I get the node that leads to the condition
+                // and set its successor to be my new basic block. Then I set the succesor of my basic block to
+                // the for.cond by adding a branch instruction to it.
+                std::cout << "Basic block is loop cond based on its label " << loopLabel << " at " << &B << std::endl;
+                std::cout << "  Its prevnode before injection is = " << B.getPrevNode()->getName().str() << " at " << B.getPrevNode() << std::endl;
+                std::cout << "  Num uses = " << B.getNumUses() << std::endl;
+                for(pred_iterator pi = pred_begin(&B), e = pred_end(&B) ; pi!=e ; ++pi) {
+                    BasicBlock* pred = *pi;
+                    std::cout << "pred = " << pred->getName().str() << std::endl;
+                }
+                for(User* u : B.users()) {
+                    std::cout << "user = " << u->getName().str() << std::endl;
+                }
+                for(Use& u : B.uses()) {
+                    std::cout << "use = " << u.get()->getName().str() << " by user = " << u.getUser()->getName(). str() << std::endl;
+                }
+                //std::cout << "  Its Predecessor before injection = " << B.getUniquePredecessor()->getName().str() << std::endl;
+
+
+                BasicBlock* Bptr = &B;
+                BasicBlock* prevptr = B.getPrevNode(); // can't use unique predecessor
+                bbmap[Bptr] = loopIdCounter;
+                std::vector<Value*> void_metric_start_args;
+                void_metric_start_args.push_back(metric_setup_call);
+                ConstantInt* ptr_loopid_0 = ConstantInt::get(IntegerType::get(Ctx,32), loopIdCounter);
+                void_metric_start_args.push_back(ptr_loopid_0);
+
+                BasicBlock* newBlock = BasicBlock::Create(Ctx, "metric.start", B.getParent(), &B);
+                prevptr->getTerminator()->setSuccessor(0,newBlock);
+                //std::cout << "Previous basic block name = " << B.getPrevNode()->getName().str() << std::endl;
+                //std::cout << "Previous basic block num operations = " << B.getPrevNode()->size() << std::endl;
+                for(User* u : B.users()) {
+                    std::cout << "user = " << u->getName().str() << std::endl;
+                }
+                for(Use& u : B.uses()) {
+                    std::cout << "use = " << u.get()->getName().str() << " by user = " << u.getUser()->getName(). str() << std::endl;
+                }
+                std::cout << "Predecessor basic block name = " << B.getUniquePredecessor()->getName().str() << std::endl;
+
+                //builder.SetInsertPoint(&(B.getUniquePredecessor()->back()));
+                //builder.CreateBr(newBlock);
+                //B.replaceAllUsesWith(newBlock);
+                //bbmap[newBlock] = loopIdCounter;
+                builder.SetInsertPoint(newBlock);
+
+                //succ_begin()
+
+                CallInst* metric_start_call =
+                //    CallInst::Create(func__Z22_metric_capture_start_P8IWrapperi, void_metric_start_args, "", B.getPrevNode());
+                builder.CreateCall(func__Z22_metric_capture_start_P8IWrapperi, void_metric_start_args);
+                builder.CreateBr(&B);
+                std::cout << "  Its predecessor after injection is = " << B.getPrevNode()->getName().str() << " at "<< newBlock << std::endl;
+                for(auto& p : bbmap) {
+                    std::cout << p.first << " = " << p.second << " | ";
+                }
+                std::cout << std::endl;
+                loopIdCounter++;
+            }
+            // To inject the stop metric function, we need to check if the for.cond basic block is the previous node of
+            // the loop body. This way I BELIEVE we can know if that for.body is for that particular for.cond.
+            // This will help us assign the same loopId for the corresponding capture_start and capture_stop. To
+            // implement this, we should keep a map of basicBlocks key and Integer values correspondign to th loop Id.
+           else if((loopLabel.find("for") == 0 ) && (loopLabel.find(constantEndString) != std::string::npos)) {
+                //std::cout << "Basic block is loop preheader based on its label " << loopLabel << std::endl;
+                //std::cout << "Its predecessor is = " << B.getPrevNode()->getName().str() << std::endl;
+                std::cout << "Basic block is loop body based on its label " << loopLabel << std::endl;
+                std::cout << "  Found prevndoe " << B.getPrevNode()->getName().str() << " at " << B.getPrevNode() << std::endl;
+                std::cout << "  Found predecessor " << B.getUniquePredecessor()->getName().str() << " at " << B.getUniquePredecessor() << std::endl;
+                //std::cout << "  Found successor " << B.getNextNode()->getName().str() << " at " << B.getNextNode() << std::endl;
+                BasicBlock* predecessor = B.getUniquePredecessor(); // in this case unique predecessor works too
+                for(auto& p : bbmap) {
+                    std::cout << p.first << " = " << p.second << " | ";
+                }
+                std::cout << std::endl;
+                if(bbmap.find(predecessor)!=bbmap.end()) {
+                    std::cout << "    Found in map predecessor " << predecessor->getName().str() << std::endl;
+                    std::vector<Value*> void_metric_stop_args;
+                    void_metric_stop_args.push_back(metric_setup_call);
+                    ConstantInt* ptr_loopid_0 = ConstantInt::get(IntegerType::get(Ctx,32), bbmap[predecessor]);
+                    void_metric_stop_args.push_back(ptr_loopid_0);
+
+                    //BasicBlock* nextBlock = B.getUniqueSuccessor();
+
+                    BasicBlock* newBlock = BasicBlock::Create(Ctx, "metric.stop", B.getParent(), &B);
+                    B.replaceAllUsesWith(newBlock); // replace all uses should work because for.end has one user which is the condition basic block
+                    builder.SetInsertPoint(newBlock);
+                    CallInst* metric_stop_call =
+                        //CallInst::Create(func__Z21_metric_capture_stop_P8IWrapperi->getFunctionType(),
+                        //                 func__Z21_metric_capture_stop_P8IWrapperi, void_metric_stop_args, "", B.getNextNode()->begin());
+                    builder.CreateCall(func__Z21_metric_capture_stop_P8IWrapperi, void_metric_stop_args);
+                    builder.CreateBr(&B);
+                }
+            }
+        }
+        F.getParent()->dump();
+      }
+
+        return true;
+      }
+
+
+    virtual bool runOnFunction2(Function &F) {
+      // Get the function to call from our runtime library.
+        if(F.getName().str().find("testFunction")!=std::string::npos) {
+      auto mod = F.getParent();
+      LLVMContext &Ctx = F.getContext();
+      std::vector<Type*>logop_args;
+       logop_args.push_back(IntegerType::get(Ctx, 32));
+      FunctionType* logop_ftype = FunctionType::get(Type::getVoidTy(Ctx), logop_args, false);
+      //Constant *logopFunc = F.getParent()->getOrInsertFunction("logop", logop_ftype);
+
+      Function* logopFunc = F.getParent()->getFunction("logop"); // _Z5logopi
+       if (!logopFunc) {
+       logopFunc = Function::Create(
+        /*Type=*/logop_ftype,
+        /*Linkage=*/GlobalValue::ExternalLinkage,
+        /*Name=*/"logop", F.getParent());
+       logopFunc->setCallingConv(CallingConv::C);
+       }
+       //std::cout << "func name = " << logopFunc->getName().str() << std::endl;
+
+      std::vector<Type*>retdouble_args;
+       retdouble_args.push_back(IntegerType::get(Ctx, 32));
+      FunctionType* retdouble_ftype = FunctionType::get(IntegerType::get(Ctx, 32), retdouble_args, false);
+    //Constant *doubleFunc = F.getParent()->getOrInsertFunction("retDouble", retdouble_ftype);
+      Function* doubleFunc = F.getParent()->getFunction("retDouble"); // _Z9retDoublei
+       if (!doubleFunc) {
+       doubleFunc = Function::Create(
+        /*Type=*/retdouble_ftype,
+        /*Linkage=*/GlobalValue::ExternalLinkage,
+        /*Name=*/"retDouble", F.getParent());
+       doubleFunc->setCallingConv(CallingConv::C);
+       }
+
+       // Function signature for metric_capture_setup
+       PointerType* PointerTy_1 = PointerType::get(IntegerType::get(mod->getContext(), 8), 0);
+       ConstantInt* const_int32_64 = ConstantInt::get(mod->getContext(), APInt(32, StringRef("0"), 10));
+
+       StructType *StructTy_class_std__basic_string = mod->getTypeByName("class.std::basic_string");
+       if (!StructTy_class_std__basic_string) {
+       StructTy_class_std__basic_string = StructType::create(mod->getContext(), "class.std::basic_string");
+       }
+       std::vector<Type*>StructTy_class_std__basic_string_fields;
+       StructType *StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider = mod->getTypeByName("struct.std::basic_string<char, std::char_traits<char>, std::allocator<char> >::_Alloc_hider");
+       if (!StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider) {
+       StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider = StructType::create(mod->getContext(), "struct.std::basic_string<char, std::char_traits<char>, std::allocator<char> >::_Alloc_hider");
+       }
+       std::vector<Type*>StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields;
+       StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields.push_back(PointerTy_1);
+       if (StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider->isOpaque()) {
+       StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider->setBody(StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider_fields, /*isPacked=*/false);
+       }
+
+       StructTy_class_std__basic_string_fields.push_back(StructTy_struct_std__basic_string_char__std__char_traits_char___std__allocator_char______Alloc_hider);
+       if (StructTy_class_std__basic_string->isOpaque()) {
+       StructTy_class_std__basic_string->setBody(StructTy_class_std__basic_string_fields, /*isPacked=*/false);
+       }
+
+       PointerType* PointerTy_25 = PointerType::get(StructTy_class_std__basic_string, 0);
+
+
+
+        std::vector<Type*>FuncTy_30_args;
+        FuncTy_30_args.push_back(PointerTy_25);
+        FuncTy_30_args.push_back(PointerTy_25);
+        //FuncTy_30_args.push_back(IntegerType::get(mod->getContext(), 32));
+        FunctionType* FuncTy_30 = FunctionType::get(
+         /*Result=*/Type::getVoidTy(mod->getContext()),
+         /*Params=*/FuncTy_30_args,
+         /*isVarArg=*/false);
+
+
+        Function* func__Z40_metric_capture_long_double_timer_setup_RSsS_ =
+                mod->getFunction("_metric_capture_long_double_timer_setup_"); //_Z40_metric_capture_long_double_timer_setup_RSsS_
+        if (!func__Z40_metric_capture_long_double_timer_setup_RSsS_) {
+        func__Z40_metric_capture_long_double_timer_setup_RSsS_ = Function::Create(
+         /*Type=*/FuncTy_30,
+         /*Linkage=*/GlobalValue::ExternalLinkage,
+         /*Name=*/"_metric_capture_long_double_timer_setup_", mod); // (external, no body)
+        func__Z40_metric_capture_long_double_timer_setup_RSsS_->setCallingConv(CallingConv::C);
+        }
+
+      if(!logopFunc)
+        std::cout << "logop not found" << std::endl;
+  if(!doubleFunc)
+      std::cout << "doubleFunc not found" << std::endl;
+/*
+  ExecutionEngine* engine = EngineBuilder(F.getParent()).create();
+  engine->addGlobalMapping(logopFunc, &::logop); // LLVM always takes non-const pointers
+  engine->addGlobalMapping(doubleFunc, &::retDouble);*/
+
+    /*Constant *getTimeFunc = F.getParent()->getOrInsertFunction(
+        "getTime", PointerType::getInt8PtrTy(Ctx), NULL
+      );*/
+
+    /*Constant *logFunc = F.getParent()->getOrInsertFunction(
+        "log", Type::getVoidTy(Ctx), PointerType::getInt8PtrTy(Ctx), NULL
+      );*/
+
+
+  IRBuilder<> builder(F.begin()->begin());
+  builder.SetInsertPoint(&*(F.begin()), builder.GetInsertPoint());
+
+  Constant* ptr_fileName_constant = ConstantDataArray::getString(Ctx, F.getParent()->getName());
+  Constant* ptr_funcName_constant = ConstantDataArray::getString(Ctx, F.getName());
+
+  AllocaInst* ptr_funcName = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "funcName");
+  //AllocaInst* ptr_funcName = new AllocaInst(StructTy_class_std__basic_string, "funcName",F.begin());
+   ptr_funcName->setAlignment(8);
+
+   AllocaInst* ptr_fileName = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "fileName");
+   //AllocaInst* ptr_fileName = new AllocaInst(StructTy_class_std__basic_string, "fileName", F.begin());
+    ptr_fileName->setAlignment(8);
+  // Create Arraytype for global variable that will hold the constant string which is the function name
+  ArrayType* ArrayTy_2 = ArrayType::get(IntegerType::get(mod->getContext(), 8), F.getParent()->getName().size()+1);
+  GlobalVariable* gvar_array__str = new GlobalVariable(/*Module=*/*mod,
+  /*Type=*/ArrayTy_2,
+  /*isConstant=*/true,
+  /*Linkage=*/GlobalValue::PrivateLinkage,
+  /*Initializer=*/0, // has initializer, specified below
+  /*Name=*/".str");
+  gvar_array__str->setAlignment(1);
+  // Create Arraytype for global variable that will hold the constant string which is the file name
+  ArrayType* ArrayTy_3 = ArrayType::get(IntegerType::get(mod->getContext(), 8), F.getName().size()+1);
+  GlobalVariable* gvar_array__str1 = new GlobalVariable(/*Module=*/*mod,
+  /*Type=*/ArrayTy_3,
+  /*isConstant=*/true,
+  /*Linkage=*/GlobalValue::PrivateLinkage,
+  /*Initializer=*/0, // has initializer, specified below
+  /*Name=*/".str1");
+  gvar_array__str1->setAlignment(1);
+
+  ConstantInt* const_int64_61 = ConstantInt::get(mod->getContext(), APInt(64, StringRef("0"), 10));
+  std::vector<Constant*> const_ptr_66_indices;
+  const_ptr_66_indices.push_back(const_int64_61);
+  const_ptr_66_indices.push_back(const_int64_61);
+  Constant* const_ptr_67 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str, const_ptr_66_indices);
+  gvar_array__str->setInitializer(ptr_fileName_constant);
+  Constant* const_ptr_66 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str1, const_ptr_66_indices);
+  gvar_array__str1->setInitializer(ptr_funcName_constant);
+
+  StructType *StructTy_class_std__allocator = mod->getTypeByName("class.std::allocator");
+   if (!StructTy_class_std__allocator) {
+   StructTy_class_std__allocator = StructType::create(mod->getContext(), "class.std::allocator");
+   }
+   std::vector<Type*>StructTy_class_std__allocator_fields;
+   StructTy_class_std__allocator_fields.push_back(IntegerType::get(mod->getContext(), 8));
+   if (StructTy_class_std__allocator->isOpaque()) {
+   StructTy_class_std__allocator->setBody(StructTy_class_std__allocator_fields, /*isPacked=*/false);
+   }
+
+   PointerType* PointerTy_27 = PointerType::get(StructTy_class_std__allocator, 0);
+   PointerType* PointerTy_28 = PointerType::get(StructTy_class_std__basic_string, 0);
+
+   std::vector<Type*>FuncTy_31_args;
+    FuncTy_31_args.push_back(PointerTy_28);
+    FuncTy_31_args.push_back(PointerTy_1);
+    FuncTy_31_args.push_back(PointerTy_27);
+    FunctionType* FuncTy_31 = FunctionType::get(
+     /*Result=*/Type::getVoidTy(mod->getContext()),
+     /*Params=*/FuncTy_31_args,
+     /*isVarArg=*/false);
+
+   Function* func__ZNSsC1EPKcRKSaIcE = mod->getFunction("_ZNSsC1EPKcRKSaIcE");
+   if (!func__ZNSsC1EPKcRKSaIcE) {
+   func__ZNSsC1EPKcRKSaIcE = Function::Create(
+    /*Type=*/FuncTy_31,
+    /*Linkage=*/GlobalValue::ExternalLinkage,
+    /*Name=*/"_ZNSsC1EPKcRKSaIcE", mod); // (external, no body)
+   func__ZNSsC1EPKcRKSaIcE->setCallingConv(CallingConv::C);
+   }
+
+   AllocaInst* ptr_ref_tmp = builder.CreateAlloca(StructTy_class_std__allocator, nullptr, "ref.tmp");
+  //AllocaInst* ptr_ref_tmp = new AllocaInst(StructTy_class_std__allocator, "ref.tmp", F.begin());
+  ptr_ref_tmp->setAlignment(1);
+
+  std::vector<Value*> void_95_params;
+   void_95_params.push_back(ptr_funcName);
+   void_95_params.push_back(const_ptr_66);
+   void_95_params.push_back(ptr_ref_tmp);
+   CallInst *void_95 = builder.CreateCall(func__ZNSsC1EPKcRKSaIcE, void_95_params);
+  //CallInst *void_95 = CallInst::Create(func__ZNSsC1EPKcRKSaIcE, void_95_params);
+   void_95->setCallingConv(CallingConv::C);
+
+   AllocaInst* ptr_ref_tmp1 = builder.CreateAlloca(StructTy_class_std__allocator, nullptr, "ref.tmp1");
+   //AllocaInst* ptr_ref_tmp1 = new AllocaInst(StructTy_class_std__allocator, "ref.tmp1", F.begin());
+   ptr_ref_tmp1->setAlignment(1);
+
+   std::vector<Value*> void_96_params;
+    void_96_params.push_back(ptr_fileName);
+    void_96_params.push_back(const_ptr_67);
+    void_96_params.push_back(ptr_ref_tmp1);
+    CallInst *void_96 = builder.CreateCall(func__ZNSsC1EPKcRKSaIcE, void_96_params);
+    //CallInst *void_96 = CallInst::Create(func__ZNSsC1EPKcRKSaIcE, void_96_params);
+    void_96->setCallingConv(CallingConv::C);
+
+  Function* func__ZNSsC1ERKSs = mod->getFunction("_ZNSsC1ERKSs");
+  if (!func__ZNSsC1ERKSs) {
+  func__ZNSsC1ERKSs = Function::Create(
+   /*Type=*/FuncTy_30,
+   /*Linkage=*/GlobalValue::ExternalLinkage,
+   /*Name=*/"_ZNSsC1ERKSs", mod); // (external, no body)
+  func__ZNSsC1ERKSs->setCallingConv(CallingConv::C);
+  }
+
+  AllocaInst* ptr_agg_tmp = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "agg.tmp");
+  //AllocaInst* ptr_agg_tmp = new AllocaInst(StructTy_class_std__basic_string, "agg.tmp", F.begin());
+   ptr_agg_tmp->setAlignment(8);
+   AllocaInst* ptr_agg_tmp1 = builder.CreateAlloca(StructTy_class_std__basic_string, nullptr, "agg.tmp1");
+   //AllocaInst* ptr_agg_tmp1 = new AllocaInst(StructTy_class_std__basic_string, "agg.tmp1",F.begin());
+   ptr_agg_tmp1->setAlignment(8);
+   std::vector<Value*> void_89_params;
+   void_89_params.push_back(ptr_agg_tmp);
+   void_89_params.push_back(ptr_fileName);
+   CallInst* void_89 = builder.CreateCall(func__ZNSsC1ERKSs, void_89_params);
+   //CallInst* void_89 = CallInst::Create(func__ZNSsC1ERKSs, void_89_params);
+   void_89->setCallingConv(CallingConv::C);
+   void_89->setTailCall(false);
+
+   std::vector<Value*> void_90_params;
+   void_90_params.push_back(ptr_agg_tmp1);
+   void_90_params.push_back(ptr_funcName);
+   CallInst *void_90 = builder.CreateCall(func__ZNSsC1ERKSs, void_90_params);
+   //CallInst *void_90 = CallInst::Create(func__ZNSsC1ERKSs, void_90_params);
+   void_90->setCallingConv(CallingConv::C);
+
+   std::vector<Value*> void_91_params;
+   void_91_params.push_back(ptr_agg_tmp);
+   void_91_params.push_back(ptr_agg_tmp1);
+
+
+
+
+      std::cout << "File name = " <<  F.getParent()->getName().str() << std::endl;
+      std::cout << "Function name = " << F.getName().str() << std::endl;
+
+      CallInst* metric_setup_call = builder.CreateCall(func__Z40_metric_capture_long_double_timer_setup_RSsS_, void_91_params);
+
+      std::cout << "callinst name = " << metric_setup_call->getCalledFunction()->getName().str() << std::endl;
+
+
+      for (auto &B : F) {
+
+        for (auto &I : B) {
+          if (auto *op = dyn_cast<BinaryOperator>(&I)) {
+            // Insert *after* `op`.
+
+
+            // Insert a call to our function.
+            Value* args[] = {op};
+            //Value* tim = builder.CreateCall(getTimeFunc, {});
+            //Value* logTim = builder.CreateCall(logFunc, tim);
+            //Value* doub = builder.CreateCall(doubleFunc, args);
+
+            //CallInst* o = builder.CreateCall(logopFunc, doub);
+
+            //Value* metric_setup_args[] = {fileName, funcName};
+
+            /*std::vector<Value*> metric_setup_args;
+            metric_setup_args.push_back(filename_struct);
+            metric_setup_args.push_back(filename_struct);*/
+
+
+            return true;
+          }
+        }
+      }
+    }
+      return false;
+    }
+
+  };
+}
+
+char InjectorPass::ID = 0;
+
+// Automatically enable the pass.
+// http://adriansampson.net/blog/clangpass.html -- Left this to give credit
+static void registerInjectorPass(const PassManagerBuilder &,
+                         legacy::PassManagerBase &PM) {
+  PM.add(new InjectorPass());
+}
+static RegisterStandardPasses
+  RegisterMyPass(PassManagerBuilder::EP_EarlyAsPossible,
+                 registerInjectorPass);

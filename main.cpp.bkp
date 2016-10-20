@@ -1,0 +1,456 @@
+#include <iostream>
+#include <ctime>
+#include <iomanip> // needed for put_time
+#include "capturefactory.h"
+#include "messagefactory.h"
+
+using namespace std;
+template<> ACapture<long double,CaptureType::energy>* ACapture<long double, CaptureType::energy>::singletonInstance = 0;
+template<> ACapture<long double,CaptureType::timer>* ACapture<long double, CaptureType::timer>::singletonInstance = 0;
+std::string stringTime;
+
+void doesNothingButSleep() {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+void doNoCaptureCrout(int d,double*S,double*D) {
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doNoCaptureCrout");
+    std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    stringTime = std::ctime(&now);
+    std::replace(stringTime.begin(), stringTime.end(), ' ', '-');
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->start(mesgs[1].get());
+        for(int i=k;i<d;++i){
+            double sum=0.;
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[i*d+k]=S[i*d+k]-sum; // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        timeCapturer->start(mesgs[4].get());
+        for(int j=k+1;j<d;++j){
+            double sum=0.;
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[k*d+j]=(S[k*d+j]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+}
+
+void doNoCaptureDoolittle(int d,double*S,double*D) {
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doNoCaptureDoolittle");
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->start(mesgs[1].get());
+        for(int j=k;j<d;++j){
+            double sum=0.;
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[k*d+j]=(S[k*d+j]-sum); // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        timeCapturer->start(mesgs[4].get());
+        for(int i=k+1;i<d;++i){
+            double sum=0.;
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[i*d+k]=(S[i*d+k]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+    timeCapturer->reduce(); // We should run the reduce on a different thread and callback the printStatistics when its done. Or we only do a lazy reduce when someone requests printStatistics!
+}
+
+
+void doSomeCalculationsCrout(int d,double*S,double*D) {
+    //std::shared_ptr<ICapture> timeCapturer = create(CaptureType::timer);
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    // factory.create(5, threadId, translation, function)
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doSomeCalculationsCrout");
+    std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    stringTime = std::ctime(&now);
+    std::replace(stringTime.begin(), stringTime.end(), ' ', '-');
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->captureVar(mesgs[1].get(), {"k"}, {std::to_string(k)});
+        /* add a record in the j index that points into
+         * the back of the j capture map and the back of the k capture map
+         */
+        timeCapturer->updateIndex(mesgs[1].get(), mesgs[2].get(), {"k"},{"i"});
+        timeCapturer->start(mesgs[1].get());
+        for(int i=k;i<d;++i){
+            timeCapturer->captureVar(mesgs[2].get(), {"i"}, {std::to_string(i)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[2].get(), mesgs[3].get(), {"i"},{"p"});
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[3].get(), {"p"}, {std::to_string(p)});
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[i*d+k]=S[i*d+k]-sum; // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[4].get(), mesgs[5].get(), {"k"},{"j"});
+        timeCapturer->start(mesgs[4].get());
+        for(int j=k+1;j<d;++j){
+            timeCapturer->captureVar(mesgs[5].get(), {"j"}, {std::to_string(j)});
+
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[5].get(), mesgs[6].get(), {"j"},{"p"});
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[6].get(), {"p"}, {std::to_string(p)});
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[k*d+j]=(S[k*d+j]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+}
+
+void doSomeMoreCalculationsDoolittle(int d,double*S,double*D) {
+    //std::shared_ptr<ICapture> timeCapturer = create(CaptureType::timer);
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    // factory.create(5, threadId, translation, function)
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doSomeMoreCalculationsDoolittle");
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->captureVar(mesgs[1].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[1].get(), mesgs[2].get(), {"k"},{"j"});
+        timeCapturer->start(mesgs[1].get());
+        for(int j=k;j<d;++j){
+            timeCapturer->captureVar(mesgs[2].get(), {"j"}, {std::to_string(j)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[2].get(), mesgs[3].get(), {"j"},{"p"});
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[3].get(), {"p"}, {std::to_string(p)});
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[k*d+j]=(S[k*d+j]-sum); // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[4].get(), mesgs[5].get(), {"k"},{"i"});
+        timeCapturer->start(mesgs[4].get());
+        for(int i=k+1;i<d;++i){
+            timeCapturer->captureVar(mesgs[5].get(), {"i"}, {std::to_string(i)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[5].get(), mesgs[6].get(), {"i"},{"p"});
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[6].get(), {"p"}, {std::to_string(p)});
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[i*d+k]=(S[i*d+k]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+    timeCapturer->reduce(); // We should run the reduce on a different thread and callback the printStatistics when its done. Or we only do a lazy reduce when someone requests printStatistics!
+    //timeCapturer->printStatistics();
+    CaptureStringSerializer<long double> css(timeCapturer);
+    css.save("./text-"+stringTime);
+    CaptureXmlSerializer<long double> cxs(timeCapturer);
+    cxs.save("./xml-"+stringTime);
+}
+
+
+void doSomeCalculations_bkp(int d,double*S,double*D) {
+    //std::shared_ptr<ICapture> timeCapturer = create(CaptureType::timer);
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    // factory.create(5, threadId, translation, function)
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doSomeCalculations");
+    std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    stringTime = std::ctime(&now);
+    std::replace(stringTime.begin(), stringTime.end(), ' ', '-');
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->captureVar(mesgs[1].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[1].get(), {"k","d"}, {std::to_string(k), std::to_string(d)});
+        //timeCapturer->captureVar(mesgs[2].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[3].get(), {"k"}, {std::to_string(k)});
+        /* add a record in the j index that points into
+         * the back of the j capture map and the back of the k capture map
+         */
+        //timeCapturer->captureVar(mesgs[1].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[1].get(), mesgs[2].get(), {"k"},{"j"});
+        //timeCapturer->updateIndex(mesgs[1].get(), mesgs[2].get(), {"k","d"},{"j"});
+        timeCapturer->start(mesgs[1].get());
+        for(int j=k;j<d;++j){
+            timeCapturer->captureVar(mesgs[2].get(), {"j"}, {std::to_string(j)});
+            //timeCapturer->captureVar(mesgs[3].get(), {"j"}, {std::to_string(j)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[2].get(), mesgs[3].get(), {"j"},{"p"});
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[3].get(), {"p"}, {std::to_string(p)});
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[k*d+j]=(S[k*d+j]-sum); // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        //timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[5].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[6].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[4].get(), {"k","d"}, {std::to_string(k),std::to_string(d)});
+        timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->updateIndex(mesgs[1].get(), mesgs[4].get(), {"k"},{"i"});
+        //timeCapturer->updateIndex(mesgs[4].get(), mesgs[5].get(), {"k","d"},{"i"});
+        timeCapturer->updateIndex(mesgs[4].get(), mesgs[5].get(), {"k"},{"i"});
+        timeCapturer->start(mesgs[4].get());
+        for(int i=k+1;i<d;++i){
+            timeCapturer->captureVar(mesgs[5].get(), {"i"}, {std::to_string(i)});
+            //timeCapturer->captureVar(mesgs[6].get(), {"i"}, {std::to_string(i)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[5].get(), mesgs[6].get(), {"i"},{"p"});
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[6].get(), {"p"}, {std::to_string(p)});
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[i*d+k]=(S[i*d+k]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+    //std::cout << "----------Before reduce" << std::endl;
+    //timeCapturer->debugStartStop();
+    //timeCapturer->reduce(); // We should run the reduce on a different thread and callback the printStatistics when its done. Or we only do a lazy reduce when someone requests printStatistics!
+    //timeCapturer->printStatistics();
+    //std::cout << "----------After reduce" << std::endl;
+    //timeCapturer->debugStartStop();
+    //CaptureStringSerializer<long double> css(timeCapturer);
+    //css.serialize();
+    //std::cout << "----------After serialize" << std::endl;
+    //timeCapturer->debugStartStop();
+    //CaptureXmlSerializer<long double> cxs(timeCapturer);
+    //cxs.serialize();
+}
+
+void doSomeMoreCalculations_bkp(int d,double*S,double*D) {
+    //std::shared_ptr<ICapture> timeCapturer = create(CaptureType::timer);
+    ICapture<long double>* timeCapturer = create<long double>(CaptureType::timer);
+    // factory.create(5, threadId, translation, function)
+    std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), "main.cpp", "doSomeMoreCalculations");
+
+    timeCapturer->start(mesgs[0].get());
+    for(int k=0;k<d;++k){
+        timeCapturer->captureVar(mesgs[1].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[2].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[3].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[1].get(), mesgs[2].get(), {"k"},{"j"});
+        timeCapturer->start(mesgs[1].get());
+        for(int j=k;j<d;++j){
+            timeCapturer->captureVar(mesgs[2].get(), {"j"}, {std::to_string(j)});
+            //timeCapturer->captureVar(mesgs[3].get(), {"j"}, {std::to_string(j)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[2].get(), mesgs[3].get(), {"j"},{"p"});
+            timeCapturer->start(mesgs[2].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[3].get(), {"p"}, {std::to_string(p)});
+                sum+=D[k*d+p]*D[p*d+j];
+            }
+            timeCapturer->stop(mesgs[2].get());
+            D[k*d+j]=(S[k*d+j]-sum); // not dividing by diagonals
+        }
+        timeCapturer->stop(mesgs[1].get());
+
+        //timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[5].get(), {"k"}, {std::to_string(k)});
+        //timeCapturer->captureVar(mesgs[6].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->captureVar(mesgs[4].get(), {"k"}, {std::to_string(k)});
+        timeCapturer->updateIndex(mesgs[4].get(), mesgs[5].get(), {"k"},{"i"});
+        timeCapturer->start(mesgs[4].get());
+        for(int i=k+1;i<d;++i){
+            timeCapturer->captureVar(mesgs[5].get(), {"i"}, {std::to_string(i)});
+            //timeCapturer->captureVar(mesgs[6].get(), {"i"}, {std::to_string(i)});
+            double sum=0.;
+            timeCapturer->updateIndex(mesgs[5].get(), mesgs[6].get(), {"i"},{"p"});
+            timeCapturer->start(mesgs[5].get());
+            for(int p=0;p<k;++p){
+                timeCapturer->captureVar(mesgs[6].get(), {"p"}, {std::to_string(p)});
+                sum+=D[i*d+p]*D[p*d+k];
+            }
+            timeCapturer->stop(mesgs[5].get());
+            D[i*d+k]=(S[i*d+k]-sum)/D[k*d+k];
+        }
+        timeCapturer->stop(mesgs[4].get());
+    }
+    timeCapturer->stop(mesgs[0].get());
+    timeCapturer->reduce(); // We should run the reduce on a different thread and callback the printStatistics when its done. Or we only do a lazy reduce when someone requests printStatistics!
+    //timeCapturer->printStatistics();
+    CaptureStringSerializer<long double> css(timeCapturer);
+    css.save("./text-"+stringTime);
+    CaptureXmlSerializer<long double> cxs(timeCapturer);
+    cxs.save("./xml-"+stringTime);
+}
+
+#include <tuple>
+int main(int argc, char* args[])
+{
+    int matrixSize = std::stoi(args[1]);
+    std::string captureFlag = "";
+    if(argc == 3)
+        captureFlag = args[2];
+    cout << "Metric Capture! " << matrixSize << endl;
+    std::cout << "sizeof(double): " << sizeof(double) << std::endl;
+    std::cout << "sizeof(long): " << sizeof(long) << std::endl;
+    std::cout << "sizeof(long long): " << sizeof(unsigned long long) << std::endl;
+    std::cout << "sizeof(long double): " << sizeof(long double) << std::endl;
+    std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    //std::cout << std::put_time(std::localtime(&now), "%c") << std::endl;
+    std::cout << std::ctime(&now) << std::endl;
+    //int matrixSize = 550;
+    double* S = new double[matrixSize*matrixSize];
+    double* D = new double[matrixSize*matrixSize];
+    std::chrono::time_point<std::chrono::system_clock> startNoCapture = std::chrono::system_clock::now();
+    doNoCaptureCrout(matrixSize, S, D);
+    doNoCaptureDoolittle(matrixSize, S, D);
+    std::chrono::time_point<std::chrono::system_clock> stopNoCapture = std::chrono::system_clock::now();
+
+    now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::cout << std::ctime(&now) << std::endl;
+    std::cout << "\nNoCapture Execution time: " << stopNoCapture.time_since_epoch().count() - startNoCapture.time_since_epoch().count() << std::endl;
+
+    if(captureFlag == "c" || captureFlag == "C") {
+        std::chrono::time_point<std::chrono::system_clock> startCapture = std::chrono::system_clock::now();
+        doSomeCalculationsCrout(matrixSize, S, D);
+        doSomeMoreCalculationsDoolittle(matrixSize, S, D);
+        std::chrono::time_point<std::chrono::system_clock> stopCapture = std::chrono::system_clock::now();
+        std::cout << "\nCapture Execution time: " << stopCapture.time_since_epoch().count() - startCapture.time_since_epoch().count() << std::endl;
+    }
+    now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+    std::cout << std::ctime(&now) << std::endl;
+    //Test time capturer
+    //std::shared_ptr<ICapture> timeCapturer = create(CaptureType::timer);
+    // testing thread ids. Apparently even if -pthreads is not linked, std::this_thread::get_id()
+    // will not crash. It will instead be an invalid id which prints to "id of non-executing thread"
+    // if tried to print it. But Try creating thread t1(..) and the run-time crashes.
+    thread t1(doesNothingButSleep);
+    thread t2(doesNothingButSleep);
+    std::tuple<std::vector<std::tuple<int,float>>, std::vector<std::tuple<float, std::string>>> testTuples;
+    std::get<0>(testTuples).push_back(std::make_tuple(0,2.0f));
+    std::cout << std::get<1>(std::get<0>(testTuples)[0]) << std::endl;
+    //VariableCapturer<int, float, std::tuple, std::vector> vc;
+    //VariableCapturer<int,float, std::tuple<int,float>, std::tuple<float,std::string>> vc;
+    //vc.capture(nullptr,0,2.0f,std::make_tuple(0,2.0f), std::make_tuple(3.0f, ""));
+    VariableCapturer<std::tuple, int, float> vc;
+    //VariableCapturer2<std::tuple, std::tuple> vc2;
+    /*VariableCapturer2 vc2;
+    int a = 0; double b = 3.0; std::string c = "";
+    vc2.capture(0, 3, 6, 7);
+    vc2.capture(1,a,b,c);*/
+    SingleFunctionVariableCapturer<std::tuple<int,float>, std::tuple<float,std::string>> vc2;
+    std::get<0>(vc2.db).push_back(std::make_tuple(1,2.2f));
+    std::get<1>(vc2.db).push_back(std::make_tuple(1.05f,"hello"));
+    std::get<1>(vc2.db).push_back(std::make_tuple(2.05f,"world"));
+    std::cout << std::get<0>(vc2.db).size() << std::endl;
+    std::cout << std::get<1>(std::get<1>(vc2.db)[1]) << std::endl;
+/*
+    // Testing if pair->second returns value or reference
+    std::map<int, std::vector<std::string>> someMap;
+    someMap[0] = {"a","b","c","d","e", "f", "g", "h", "i","j"};
+    someMap[1] = {"b","c","d","e", "f", "g", "h", "i","j"};
+    someMap[2] = {"c","d","e", "f", "g", "h", "i","j"};
+    auto &vec = someMap.begin()->second;
+    vec.push_back("z");
+    std::cout << "vec.back() = " << vec.back() << std::endl;
+    std::cout << "map.begin()->second.end() = " << someMap[0].back() << std::endl;
+
+    int a = 4;
+    int &ra = a;
+    int b = ra;
+    b = 5;
+    std::cout << a << std::endl;
+    std::cout << ra << std::endl;
+    std::cout << b << std::endl;
+*/
+/*
+    CaptureMessage timerStartMessage;
+    timerStartMessage.threadId = std::this_thread::get_id();
+    timerStartMessage.translationUnit = "main.cpp";
+    timerStartMessage.functionName = "main";
+    timerStartMessage.capturedUnitId = 1;
+
+    timeCapturer->start(&timerStartMessage);
+    // We can use the same start message because it just tells us which capture unit we are logging data about
+    timeCapturer->stop(&timerStartMessage);
+
+    // The problem here is that we need to know the type of the value being logged by the library
+    // to cast down to AbstractCapture. We want to avoid that because the interface ICapture should not know
+    // about that. Neither should the client code for the factory should deal with that OR ELSE why did
+    // we create the factory in the first place. It's supposed to be there to shield us from any changes
+    // or knowledge about the Concrete types TimeCapture and EnergyCapture and the details of the libraries
+    // that these two Capturers are wrapping.
+    ACapture<std::chrono::time_point<std::chrono::system_clock>>* aCaptTime = dynamic_cast<ACapture<std::chrono::time_point<std::chrono::system_clock>>*>(timeCapturer.get());
+    std::cout << "Printing first START logged value for demonstration purposes:\n" << aCaptTime->getStartMetrics()[timerStartMessage.threadId][timerStartMessage.functionName][timerStartMessage.capturedUnitId][0].time_since_epoch().count() << std::endl;
+    std::cout << "Printing first STOP logged value for demonstration purposes:\n" << aCaptTime->getStopMetrics()[timerStartMessage.threadId][timerStartMessage.functionName][timerStartMessage.capturedUnitId][0].time_since_epoch().count() << std::endl;
+    std::cout << std::endl;
+
+    // Test energy capturer
+    std::shared_ptr<ICapture> energyCapturer = create(CaptureType::energy);
+
+    CaptureMessage energyStartMessage;
+    energyStartMessage.threadId = std::this_thread::get_id();
+    energyStartMessage.translationUnit = "main.cpp";
+    energyStartMessage.functionName = "main";
+    energyStartMessage.capturedUnitId = 2;
+
+    energyCapturer->start(&energyStartMessage);
+    energyCapturer->stop(&energyStartMessage);
+
+    ACapture<double>* aCaptEnergy = dynamic_cast<ACapture<double>*>(energyCapturer.get());
+    std::cout << "Printing first START logged value for demonstration purposes:\n" << aCaptEnergy->getStartMetrics()[energyStartMessage.threadId][energyStartMessage.functionName][energyStartMessage.capturedUnitId][0] << std::endl;
+    std::cout << "Printing first STOP logged value for demonstration purposes:\n" << aCaptEnergy->getStopMetrics()[energyStartMessage.threadId][energyStartMessage.functionName][energyStartMessage.capturedUnitId][0] << std::endl;
+    std::cout << std::endl;
+
+    std::shared_ptr<ICapture> nullCapturer = create(CaptureType::power);
+*/
+    std::cout << t1.get_id() << std::endl;
+    std::cout << t2.get_id() << std::endl;
+    t1.join();
+    t2.join();
+
+    delete[] S;
+    delete[] D;
+
+    return 0;
+}
+

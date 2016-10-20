@@ -1,0 +1,52 @@
+Pass 'Unnamed pass: implement Pass::getPassName()' is not initialized.
+Verify if there is a pass dependency cycle.
+Required Passes:
+clang-3.7: /home/heisenberg/Documents/clang-llvm/llvm/lib/IR/LegacyPassManager.cpp:640: void llvm::PMTopLevelManager::schedulePass(llvm::Pass*): Assertion `PI && "Expected required passes to be initialized"' failed.
+#0 0x2675eee llvm::sys::PrintStackTrace(llvm::raw_ostream&) (/usr/local/bin/clang-3.7+0x2675eee)
+#1 0x2676203 PrintStackTraceSignalHandler(void*) (/usr/local/bin/clang-3.7+0x2676203)
+#2 0x2674d03 SignalHandler(int) (/usr/local/bin/clang-3.7+0x2674d03)
+#3 0x7f96d66a7cb0 __restore_rt (/lib/x86_64-linux-gnu/libpthread.so.0+0xfcb0)
+#4 0x7f96d585e425 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x36425)
+#5 0x7f96d5861b8b abort (/lib/x86_64-linux-gnu/libc.so.6+0x39b8b)
+#6 0x7f96d58570ee (/lib/x86_64-linux-gnu/libc.so.6+0x2f0ee)
+#7 0x7f96d5857192 (/lib/x86_64-linux-gnu/libc.so.6+0x2f192)
+#8 0x22631c4 llvm::PMTopLevelManager::schedulePass(llvm::Pass*) (/usr/local/bin/clang-3.7+0x22631c4)
+#9 0x2261cb8 llvm::legacy::FunctionPassManagerImpl::add(llvm::Pass*) (/usr/local/bin/clang-3.7+0x2261cb8)
+#10 0x2266869 llvm::legacy::FunctionPassManager::add(llvm::Pass*) (/usr/local/bin/clang-3.7+0x2266869)
+#11 0x7f96d561204d registerInjectorPass(llvm::PassManagerBuilder const&, llvm::legacy::PassManagerBase&) /home/heisenberg/Qt-workspace/MetricCaptureInjector/injector/InjectorPass.cpp:412:1
+#12 0x2edde4c llvm::PassManagerBuilder::addExtensionsToPM(llvm::PassManagerBuilder::ExtensionPointTy, llvm::legacy::PassManagerBase&) const (/usr/local/bin/clang-3.7+0x2edde4c)
+#13 0x2eddfb0 llvm::PassManagerBuilder::populateFunctionPassManager(llvm::legacy::FunctionPassManager&) (/usr/local/bin/clang-3.7+0x2eddfb0)
+#14 0x2c1e3d7 (anonymous namespace)::EmitAssemblyHelper::CreatePasses() (/usr/local/bin/clang-3.7+0x2c1e3d7)
+#15 0x2c1f818 (anonymous namespace)::EmitAssemblyHelper::EmitAssembly(clang::BackendAction, llvm::raw_pwrite_stream*) (/usr/local/bin/clang-3.7+0x2c1f818)
+#16 0x2c1fb91 clang::EmitBackendOutput(clang::DiagnosticsEngine&, clang::CodeGenOptions const&, clang::TargetOptions const&, clang::LangOptions const&, llvm::StringRef, llvm::Module*, clang::BackendAction, llvm::raw_pwrite_stream*) (/usr/local/bin/clang-3.7+0x2c1fb91)
+#17 0x2c0129a clang::BackendConsumer::HandleTranslationUnit(clang::ASTContext&) (/usr/local/bin/clang-3.7+0x2c0129a)
+#18 0x3685a16 clang::ParseAST(clang::Sema&, bool, bool) (/usr/local/bin/clang-3.7+0x3685a16)
+#19 0x28782ee clang::ASTFrontendAction::ExecuteAction() (/usr/local/bin/clang-3.7+0x28782ee)
+#20 0x2c037b0 clang::CodeGenAction::ExecuteAction() (/usr/local/bin/clang-3.7+0x2c037b0)
+#21 0x2877dc9 clang::FrontendAction::Execute() (/usr/local/bin/clang-3.7+0x2877dc9)
+#22 0x283de9c clang::CompilerInstance::ExecuteAction(clang::FrontendAction&) (/usr/local/bin/clang-3.7+0x283de9c)
+#23 0x298d185 clang::ExecuteCompilerInvocation(clang::CompilerInstance*) (/usr/local/bin/clang-3.7+0x298d185)
+#24 0x12f49bc cc1_main(llvm::ArrayRef<char const*>, char const*, void*) (/usr/local/bin/clang-3.7+0x12f49bc)
+#25 0x12ed226 ExecuteCC1Tool(llvm::ArrayRef<char const*>, llvm::StringRef) (/usr/local/bin/clang-3.7+0x12ed226)
+#26 0x12ed80d main (/usr/local/bin/clang-3.7+0x12ed80d)
+#27 0x7f96d584976d __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2176d)
+#28 0x12ea1a9 _start (/usr/local/bin/clang-3.7+0x12ea1a9)
+Stack dump:
+0.	Program arguments: /usr/local/bin/clang-3.7 -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -main-file-name main.cpp -mrelocation-model static -mthread-model posix -mdisable-fp-elim -fmath-errno -masm-verbose -mconstructor-aliases -munwind-tables -fuse-init-array -target-cpu x86-64 -dwarf-column-info -fno-unique-section-names -coverage-file /home/heisenberg/Qt-workspace/MetricCaptureInjector/main.cpp -resource-dir /usr/local/bin/../lib/clang/3.7.0 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/4.9/../../../../include/c++/4.9 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/4.9/../../../../include/x86_64-linux-gnu/c++/4.9 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/4.9/../../../../include/x86_64-linux-gnu/c++/4.9 -internal-isystem /usr/lib/gcc/x86_64-linux-gnu/4.9/../../../../include/c++/4.9/backward -internal-isystem /usr/local/include -internal-isystem /usr/local/bin/../lib/clang/3.7.0/include -internal-externc-isystem /usr/include/x86_64-linux-gnu -internal-externc-isystem /include -internal-externc-isystem /usr/include -O0 -std=c++11 -fdeprecated-macro -fdebug-compilation-dir /home/heisenberg/Qt-workspace/MetricCaptureInjector -ferror-limit 19 -fmessage-length 0 -mstackrealign -fobjc-runtime=gcc -fcxx-exceptions -fexceptions -fdiagnostics-show-option -load ../MetricCaptureInjector-build/injector/libInjectorPass.so -o main.o -x c++ main.cpp 
+1.	<eof> parser at end of file
+clang-3.7: error: unable to execute command: Aborted (core dumped)
+clang-3.7: error: clang frontend command failed due to signal (use -v to see invocation)
+clang version 3.7.0 (http://llvm.org/git/clang.git 9a9c87baad47937aaa1f6ca78fa799ab31e970af) (http://llvm.org/git/llvm.git 32675bbfd0c79f67865c0999d8c90a31848ee648)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+clang-3.7: note: diagnostic msg: PLEASE submit a bug report to http://llvm.org/bugs/ and include the crash backtrace, preprocessed source, and associated run script.
+clang-3.7: note: diagnostic msg: 
+********************
+
+PLEASE ATTACH THE FOLLOWING FILES TO THE BUG REPORT:
+Preprocessed source(s) and associated run script(s) are located at:
+clang-3.7: note: diagnostic msg: /tmp/main-1661c6.cpp
+clang-3.7: note: diagnostic msg: /tmp/main-1661c6.sh
+clang-3.7: note: diagnostic msg: 
+
+********************
