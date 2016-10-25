@@ -1,5 +1,5 @@
-SET(CMAKE_C_COMPILER "/usr/local/bin/clang")
-SET(CMAKE_CXX_COMPILER "/usr/local/bin/clang++")
+#SET(CMAKE_C_COMPILER "/usr/local/bin/clang")
+#SET(CMAKE_CXX_COMPILER "/usr/local/bin/clang++")
 
 project(MetricCaptureInjector)
 
@@ -14,8 +14,8 @@ aux_source_directory(. SRC_LIST)
 find_package(Threads)
 find_package(LLVM REQUIRED CONFIG)
 add_definitions(${LLVM_DEFINITIONS})
-include_directories(/usr/local/include/llvm)
-include_directories(/usr/local/include/clang)
+#include_directories(/usr/local/include/llvm)
+#include_directories(/usr/local/include/clang)
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 link_directories(/usr/lib/gcc/x86_64-linux-gnu/4.9)

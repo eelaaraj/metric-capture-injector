@@ -124,6 +124,70 @@ struct InjectorPass : public FunctionPass {
         return false;
     }
 
+    void insertStartCapture(Loop* loop, int loopId, Function* start, CallInst* metric_setup_call) {
+        if(BasicBlock* pred = loop->getLoopPredecessor()) {
+            Function* F = pred->getParent();
+            LLVMContext& Ctx = F->getContext();
+            IRBuilder<> builder(Ctx);
+            std::vector<Value*> void_metric_start_args;
+            // The result of metric_setup which is the IWrapper pointer
+            void_metric_start_args.push_back(metric_setup_call);
+            // Set the start capture loopId to be the loopcounter and push it on the args vector
+            ConstantInt* ptr_loopid_0 = ConstantInt::get(IntegerType::get(Ctx,32), loopId);
+            void_metric_start_args.push_back(ptr_loopid_0);
+            // Inserts the new block just before the condition block. If you now check the previousnode
+            // of for.cond, it will point to metric.start rather than the predecessor. This is because the
+            // new basic block was added before it as its created.
+            BasicBlock* loopHeader = loop->getHeader();
+            BasicBlock* newBlock = BasicBlock::Create(Ctx, "metric.start", pred->getParent(), loopHeader);
+            // Sets the first successor edge to be the new block instead of the for.cond. This works fine
+            // because there is only one incoming edge into for.cond.
+            pred->getTerminator()->setSuccessor(0,newBlock);
+
+            builder.SetInsertPoint(newBlock);
+
+            CallInst* metric_start_call = builder.CreateCall(start, void_metric_start_args);
+            builder.CreateBr(loopHeader);
+        }
+
+    }
+
+    void insertStopCapture(Loop* loop, int loopId, Function* stop, CallInst* metric_setup_call) {
+        if(BasicBlock* exit = loop->getExitBlock()) {
+            Function* F = exit->getParent();
+            LLVMContext& Ctx = F->getContext();
+            IRBuilder<> builder(Ctx);
+            std::vector<Value*> void_metric_stop_args;
+            void_metric_stop_args.push_back(metric_setup_call);
+            // Add the appropriate loop Id by looking up the value in our map
+            ConstantInt* ptr_loopid_0 = ConstantInt::get(IntegerType::get(Ctx,32), loopId);
+            void_metric_stop_args.push_back(ptr_loopid_0);
+            BasicBlock* newBlock = BasicBlock::Create(Ctx, "metric.stop", exit->getParent(), exit);
+            exit->replaceAllUsesWith(newBlock); // replace all uses should work because for.end has one user which is the condition basic block
+            builder.SetInsertPoint(newBlock);
+            CallInst* metric_stop_call =
+                    builder.CreateCall(stop, void_metric_stop_args);
+            builder.CreateBr(exit);
+        }
+    }
+
+    void sandwichLoop(Loop* loop, int loopId, Function* start, Function* stop, CallInst* metric_setup_call) {
+        // We only sandwich the loop if the two conditions are met. We have a one unique predecessor and one unique successor
+        if(loop->getLoopPredecessor() && loop->getExitBlock()) {
+            insertStartCapture(loop, loopId, start, metric_setup_call);
+            insertStopCapture(loop, loopId, stop, metric_setup_call);
+        }
+    }
+
+    void traverseChildLoops(Loop* loop, int& loopId, Function* start, Function* stop, CallInst* metric_setup_call) {
+        std::cerr << "# child loops of current loop = " << loop->getSubLoops().size() << std::endl;
+        for(Loop::iterator it = loop->begin(); it!=loop->end(); it++) {
+            sandwichLoop(*it, loopId, start, stop, metric_setup_call);
+            loopId++;
+            traverseChildLoops(*it, loopId, start, stop, metric_setup_call);
+        }
+    }
+
     virtual bool runOnFunction(Function& F){
         // Get the function to call from our runtime library.
         std::string functionName = F.getName().str();
@@ -215,6 +279,7 @@ struct InjectorPass : public FunctionPass {
             std::vector<Type*>FuncTy_30_args;
             FuncTy_30_args.push_back(PointerTy_25);
             FuncTy_30_args.push_back(PointerTy_25);
+            FuncTy_30_args.push_back(IntegerType::get(Ctx, 32));
             FuncTy_30_args.push_back(IntegerType::get(Ctx, 32));
             //FuncTy_30_args.push_back(IntegerType::get(mod->getContext(), 32));
             FunctionType* FuncTy_30 = FunctionType::get(
@@ -330,9 +395,9 @@ struct InjectorPass : public FunctionPass {
             std::vector<Constant*> const_ptr_66_indices;
             const_ptr_66_indices.push_back(const_int64_61);
             const_ptr_66_indices.push_back(const_int64_61);
-            Constant* const_ptr_67 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str, const_ptr_66_indices);
+            Constant* const_ptr_67 = ConstantExpr::getGetElementPtr(ArrayTy_2, gvar_array__str, const_ptr_66_indices);
             gvar_array__str->setInitializer(ptr_fileName_constant);
-            Constant* const_ptr_66 = ConstantExpr::getGetElementPtr(IntegerType::get(mod->getContext(), 8), gvar_array__str1, const_ptr_66_indices);
+            Constant* const_ptr_66 = ConstantExpr::getGetElementPtr(ArrayTy_3, gvar_array__str1, const_ptr_66_indices);
             gvar_array__str1->setInitializer(ptr_funcName_constant);
 
             StructType *StructTy_class_std__allocator = mod->getTypeByName("class.std::allocator");
@@ -397,7 +462,7 @@ struct InjectorPass : public FunctionPass {
             void_91_params.push_back(ptr_funcName);
             ConstantInt* ptr_loop_count = ConstantInt::get(IntegerType::get(Ctx,32), 5);
             void_91_params.push_back(ptr_loop_count);
-
+            void_91_params.push_back(ptr_loop_count);
 
             std::cerr << "File name = " <<  F.getParent()->getName().str() << std::endl;
             std::cerr << "Function name = " << F.getName().str() << std::endl;
@@ -416,19 +481,33 @@ struct InjectorPass : public FunctionPass {
             // start and stop calls. This allows to inject the cleanup call.
             insertCleanupBlock(rb, func_metric_capture_cleanup, metric_setup_call, builder);
 
+            // This is the new implementation version. It uses the LoopInfo Wrapper Pass to figure out
+            // loops. Then we traverse the loops and sandwich each loop with a start and stop capture.
+            // Previous implementation relied on reading loop labels to figure if a block is the loop header
+            // or is the loop end and using that information to inject captures. It appears that different versions
+            // of LLVM and clang (also depends on how llvm was compiled i.e. debug vs release) get rid of those
+            // labels. Thus the previous implementation was unpredictable.
+            int loopId = 0;
+            LoopInfo& loopInfo = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+            for(LoopInfo::iterator it = loopInfo.begin(); it!=loopInfo.end(); it++) {
+                Loop* loop = *it;
+                sandwichLoop(loop, loopId, func__Z22_metric_capture_start_P8IWrapperi, func__Z21_metric_capture_stop_P8IWrapperi, metric_setup_call);
+                loopId++;
+                traverseChildLoops(loop, loopId, func__Z22_metric_capture_start_P8IWrapperi, func__Z21_metric_capture_stop_P8IWrapperi, metric_setup_call);
+            }
 
-            std::map <BasicBlock*, int > bbmap;
+            /*std::map <BasicBlock*, int > bbmap;
             int loopIdCounter = 0;
             for (BasicBlock &B : F) {
-                /*for(auto& I : B) {
-                    if(auto* op = dyn_cast<CallInst>(I)){
-
-                    }
-                }*/
+                //                for(auto& I : B) {
+                //                    if(auto* op = dyn_cast<CallInst>(I)){
+                //                    }
+                //                }
                 //std::string loopLabel = B.getValueName()->getValue()->getName().str();
                 std::string loopLabel = B.getName().str();
+                std::cerr<<"loop label = " << loopLabel <<std::endl;
                 if((loopLabel.find("for") == 0 ) && (loopLabel.find(constantCondString) != std::string::npos)) {
-
+                    std::cerr<<"inserted start block"<<std::endl;
                     insertStartCaptureBlock(&B, bbmap, loopIdCounter, func__Z22_metric_capture_start_P8IWrapperi, metric_setup_call, builder);
                     loopIdCounter++;
                 }
@@ -439,7 +518,7 @@ struct InjectorPass : public FunctionPass {
                 // This will help us assign the same loopId for the corresponding capture_start and capture_stop. To
                 // implement this, we should keep a map of basicBlocks key and Integer values correspondign to th loop Id.
                 else if((loopLabel.find("for") == 0 ) && (loopLabel.find(constantEndString) != std::string::npos)) {
-
+                    std::cerr<<"inserted stop block"<<std::endl;
                     insertStopCaptureBlock(&B, bbmap, func__Z21_metric_capture_stop_P8IWrapperi, metric_setup_call, builder);
                 }
                 // Last thing we need to handle is the exit block for the function. This is not necessarily the last block.
@@ -449,7 +528,7 @@ struct InjectorPass : public FunctionPass {
                 // the end which only injects the cleanup function. For that we should look into pass dependencies!!!!
                 // if(Basic block is the terminator block)
                 //    Inject the cleanup function.
-            }
+            }*/
             //F.getParent()->dump();
         }
 
@@ -460,6 +539,7 @@ struct InjectorPass : public FunctionPass {
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         //AU.setPreservesCFG();
         AU.addRequired<UnifyFunctionExitNodes>();
+        AU.addRequired<LoopInfoWrapperPass>();
     }
 
 };
