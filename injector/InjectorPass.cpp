@@ -180,7 +180,7 @@ struct InjectorPass : public FunctionPass {
     }
 
     void traverseChildLoops(Loop* loop, int& loopId, Function* start, Function* stop, CallInst* metric_setup_call) {
-        std::cerr << "# child loops of current loop = " << loop->getSubLoops().size() << std::endl;
+        //std::cerr << "# child loops of current loop = " << loop->getSubLoops().size() << std::endl;
         for(Loop::iterator it = loop->begin(); it!=loop->end(); it++) {
             sandwichLoop(*it, loopId, start, stop, metric_setup_call);
             loopId++;
@@ -464,19 +464,19 @@ struct InjectorPass : public FunctionPass {
             void_91_params.push_back(ptr_loop_count);
             void_91_params.push_back(ptr_loop_count);
 
-            std::cerr << "File name = " <<  F.getParent()->getName().str() << std::endl;
-            std::cerr << "Function name = " << F.getName().str() << std::endl;
+            //std::cerr << "File name = " <<  F.getParent()->getName().str() << std::endl;
+            //std::cerr << "Function name = " << F.getName().str() << std::endl;
 
             // Call the metric setup function
             CallInst* metric_setup_call = builder.CreateCall(func__Z40_metric_capture_long_double_timer_setup_RSsS_, void_91_params);
 
-            std::cerr << "callinst name = " << metric_setup_call->getCalledFunction()->getName().str() << std::endl;
+            //std::cerr << "callinst name = " << metric_setup_call->getCalledFunction()->getName().str() << std::endl;
 
             std::string constantCondString = "cond";
             std::string constantEndString = "end";
 
             BasicBlock* rb = getAnalysis<UnifyFunctionExitNodes>().getReturnBlock();
-            std::cerr << "Returning block is = " << rb->getName().str() << std::endl;
+            //std::cerr << "Returning block is = " << rb->getName().str() << std::endl;
             // We run the UnifyFunctionExitNodes pass before we start looping over the basic blocks and injecting
             // start and stop calls. This allows to inject the cleanup call.
             insertCleanupBlock(rb, func_metric_capture_cleanup, metric_setup_call, builder);
