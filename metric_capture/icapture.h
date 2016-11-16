@@ -68,6 +68,7 @@ public:
 
     //template<Vars... vars>
     //virtual void captureVariables(CaptureMessage* message) = 0;
+    virtual int& coiId() = 0;
     virtual int& runId() = 0;
     virtual void reduce() = 0;
     virtual void updateIndex(CaptureMessage* currentScopeMsg, CaptureMessage* nextScopeMsg, std::vector<std::string> parentVars, std::vector<std::string> nextVars) = 0;
@@ -88,6 +89,7 @@ public:
     //virtual ICapture* create() = 0;
     virtual ~ACapture() {}
     //virtual ICapture* instance() = 0;
+    virtual int& coiId() { return db.coiId(); }
     virtual int& runId() { return db.runId(); }
     virtual void start(CaptureMessage* message) = 0;
     virtual void stop(CaptureMessage* message) = 0;

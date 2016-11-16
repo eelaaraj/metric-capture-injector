@@ -9,8 +9,12 @@
 #include "capturefactory.h"
 #include "messagefactory.h"
 
-template<> ACapture<long double,CaptureType::energy>* ACapture<long double, CaptureType::energy>::singletonInstance = 0;
-template<> ACapture<long double,CaptureType::timer>* ACapture<long double, CaptureType::timer>::singletonInstance = 0;
+//template<> ACapture<long double,CaptureType::energy>* ACapture<long double, CaptureType::energy>::singletonInstance = 0;
+//template<> ACapture<long double,CaptureType::timer>* ACapture<long double, CaptureType::timer>::singletonInstance = 0;
+
+template<> ACapture< double,CaptureType::energy>* ACapture<double, CaptureType::energy>::singletonInstance = 0;
+template<> ACapture< double,CaptureType::timer>* ACapture<double, CaptureType::timer>::singletonInstance = 0;
+
 std::string stringTime;
 //template<typename T> ICapture<T>* capturer;
 //std::vector<std::shared_ptr<CaptureMessage>> mesgs;
@@ -33,7 +37,7 @@ public:
 template <typename T>
 class CaptureWrapper: public IWrapper {
 public:
-    CaptureWrapper(int runId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType);
+    CaptureWrapper(int coiId, int runId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType);
     virtual ~CaptureWrapper();
     virtual void captureVar(int loopId, std::string name, int value);
     virtual void captureVar(int loopId, std::string name, std::string value);
@@ -47,7 +51,8 @@ public:
     virtual void stop(int loopId);
     virtual void reduce();
 private:
-    int id;
+    int cId; // COI/Benchmark Id
+    int rId; // run id
     std::string file;
     std::string func;
     ICapture<T>* capturer;
@@ -56,10 +61,11 @@ private:
 };
 
 template<typename T>
-CaptureWrapper<T>::CaptureWrapper(int runId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType)
-    : id(runId), file(fileName), func(functionName), capturer(create<T>(captureType)),
+CaptureWrapper<T>::CaptureWrapper(int coiId, int runId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType)
+    : cId(coiId), rId(runId), file(fileName), func(functionName), capturer(create<T>(captureType)),
       mesgs(createInstances(loopCount, std::this_thread::get_id(), fileName, functionName)),
       now(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())) {
+    capturer->coiId() = coiId;
     capturer->runId() = runId; // ICapture will pass runId to the CaptureDB to be stored there. ICapture does not need runId for now
 }
 
@@ -117,8 +123,11 @@ void CaptureWrapper<T>::stop(int loopId) {
     capturer->stop(mesgs[loopId].get());
 }
 
+// This function setups the capture mechanics. It is passed an ID that identifies the COI/Benchmark that we are capturing metrics
+// for. Because we might run the instrumented executable multiple times, we will generate a unique Id that identifies the run.
+// This will be passed into the captureWrapper object and to the captureDB eventually to be stored with the metrics.
 template <typename T>
-IWrapper* _metric_capture_setup_(int runId, std::string fileName, std::string functionName, int loopCount, CaptureType captureType) {
+IWrapper* _metric_capture_setup_(int coiId, std::string fileName, std::string functionName, int loopCount, CaptureType captureType) {
 /*  ICapture<T>* capturer = create<T>(captureType);
     std::vector<std::shared_ptr<CaptureMessage>> mesgs = createInstances(7, std::this_thread::get_id(), fileName, functionName);
     std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -126,7 +135,9 @@ IWrapper* _metric_capture_setup_(int runId, std::string fileName, std::string fu
     std::replace(stringTime.begin(), stringTime.end(), ' ', '-');
     std::cout << "Instrumented function " << functionName << " in " << fileName << " successfully at "<< stringTime << std::endl;
 */
-    IWrapper* wrapper = new CaptureWrapper<T>(runId, fileName, functionName, loopCount, captureType);
+    std::srand(std::time(0));
+    int uniqueRunID = rand();
+    IWrapper* wrapper = new CaptureWrapper<T>(coiId, uniqueRunID, fileName, functionName, loopCount, captureType);
     return wrapper;
 }
 
@@ -140,12 +151,13 @@ void* _metric_capture_cleanup_(IWrapper* capturer) {
 
 extern "C" {
 
-IWrapper* _metric_capture_long_double_setup_(int runId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType) {
-    return _metric_capture_setup_<long double>(runId, fileName, functionName, loopCount, captureType);
+IWrapper* _metric_capture_long_double_setup_(int coiId, const std::string& fileName, const std::string& functionName, int loopCount, CaptureType captureType) {
+    //return _metric_capture_setup_<long double>(runId, fileName, functionName, loopCount, captureType);
+    return _metric_capture_setup_<double>(coiId, fileName, functionName, loopCount, captureType);
 }
 
-IWrapper* _metric_capture_long_double_timer_setup_(const std::string& fileName, const std::string& functionName, int loopCount, int runId) {
-    return _metric_capture_long_double_setup_(runId, fileName, functionName, loopCount, CaptureType::timer);
+IWrapper* _metric_capture_long_double_timer_setup_(const std::string& fileName, const std::string& functionName, int loopCount, int coiId) {
+    return _metric_capture_long_double_setup_(coiId, fileName, functionName, loopCount, CaptureType::timer);
 }
 
 void _metric_capture_start_(IWrapper* capturer, int loopId) {
@@ -186,8 +198,8 @@ void _var_capture_long_long_(IWrapper* capturer, int loopId, std::string name, l
     capturer->captureVar(loopId, name, value);
 }
 
-IWrapper* _metric_capture_long_double_energy_setup_(const std::string& fileName, const std::string& functionName, int loopCount, int runId) {
-    return _metric_capture_long_double_setup_(runId, fileName, functionName, loopCount, CaptureType::energy);
+IWrapper* _metric_capture_long_double_energy_setup_(const std::string& fileName, const std::string& functionName, int loopCount, int coiId) {
+    return _metric_capture_long_double_setup_(coiId, fileName, functionName, loopCount, CaptureType::energy);
 }
 
 void _metric_capture_cleanup_(IWrapper* capturer) {

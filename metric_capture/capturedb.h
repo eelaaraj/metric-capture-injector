@@ -57,6 +57,7 @@ template<typename T>
 class CaptureDB {
 public:
     ~CaptureDB();
+    int& coiId() { return cId; }
     int& runId() { return rId; }
     void insertStartMetric(CaptureMessage* msg, T value);
     void insertStopMetric(CaptureMessage* msg, T value);
@@ -77,6 +78,7 @@ private:
     //void serializeCaptures();
     json serializeAllDatapointsWithKeys();
 private:
+    int cId;
     int rId;
     std::map<std::thread::id, std::map<std::string, std::map<int, std::vector<T>>>> unitInnerMetricStart;
     std::map<std::thread::id, std::map<std::string, std::map<int, std::vector<T>>>> unitInnerMetricStop;
@@ -163,10 +165,334 @@ json CaptureDB<T>::serializeStatisticsWithKeys() {
     }
     minAvgMaxJson["threads"] = threadsJson;
     minAvgMaxJson["runId"] = rId;
+    minAvgMaxJson["codeId"] = cId;
     //std::cout << capturesJson << std::endl;
     //std::cout << minAvgMaxJson << std::endl;
     //createJsonFile("./db_min_avg_max.json", minAvgMaxJson);
     return minAvgMaxJson;
+}
+
+template <typename T>
+using Stops = std::map<std::thread::id, std::map<std::string, std::map<int, std::vector<T>>>>;
+template <typename T>
+using Captures = std::map<std::thread::id, std::map<std::string, std::map<int, std::map<std::string, std::vector<std::string>>>>>;
+#include <bsoncxx/json.hpp>
+#include <mongocxx/client.hpp>
+#include <mongocxx/stdx.hpp>
+#include <mongocxx/uri.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
+#include <bsoncxx/builder/stream/helpers.hpp>
+#include <bsoncxx/types.hpp>
+#include <bsoncxx/stdx/optional.hpp>
+// c and mongoc includes
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <mongoc.h>
+
+void writeToGridFS(const std::string& jsonURI) {
+    mongoc_gridfs_t *gridfs;
+    mongoc_gridfs_file_t *file;
+    mongoc_gridfs_file_list_t *list;
+    mongoc_gridfs_file_opt_t opt = { 0 };
+    mongoc_client_t *client;
+    mongoc_stream_t *stream;
+    bson_t query;
+    bson_t child;
+    bson_error_t error;
+    ssize_t r;
+    char buf[4096];
+    mongoc_iovec_t iov;
+    const char * filename;
+    const char * command;
+    bson_value_t id;
+
+    mongoc_init();
+
+    iov.iov_base = (void *)buf;
+    iov.iov_len = sizeof buf;
+
+    /* connect to localhost client */
+    client = mongoc_client_new ("mongodb://172.17.0.2:27017");
+    assert(client);
+    mongoc_client_set_error_api (client, 2);
+
+    /* grab a gridfs handle in test prefixed by fs */
+    gridfs = mongoc_client_get_gridfs (client, "sope", "fs", &error);
+    assert(gridfs);
+
+    {
+	stream = mongoc_stream_file_new_for_path (jsonURI.c_str(), O_RDONLY, 0);
+	assert (stream);
+
+	opt.filename = jsonURI.c_str();
+
+	/* the driver generates a file_id for you */
+	file = mongoc_gridfs_create_file_from_stream (gridfs, stream, &opt);
+	assert (file);
+
+	/*
+	id.value_type = BSON_TYPE_INT32;
+	id.value.v_int32 = 1;
+
+	// optional: the following method specifies a file_id of any BSON type
+	if (!mongoc_gridfs_file_set_id (file, &id, &error)) {
+	    fprintf (stderr, "%s\n", error.message);
+	    return 1;
+	}
+	*/
+
+	//mongoc_gridfs_file_save(file);
+	mongoc_gridfs_file_destroy(file);
+    }
+
+    mongoc_gridfs_destroy (gridfs);
+    mongoc_client_destroy (client);
+
+    mongoc_cleanup ();
+}
+
+template<typename T>
+void serializeAllDatapointsToMongo(Stops<T>& metricStops, Captures<T>& varCaptures, int coiId, int runId) {
+    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::stream::array;
+    using bsoncxx::builder::stream::open_document;
+    using bsoncxx::builder::stream::open_array;
+    using bsoncxx::builder::stream::close_document;
+    using bsoncxx::builder::stream::close_array;
+    mongocxx::uri dbUri{"mongodb://172.17.0.2:27017"};
+    mongocxx::client client(dbUri);
+    mongocxx::database db = client["sope"];
+    mongocxx::collection collection = db["metrics"];
+    std::vector<bsoncxx::document::value> docs;
+    std::hash<std::thread::id> idHasher;
+    for(auto tIt = metricStops.begin(); tIt !=  metricStops.end(); tIt++) {
+	auto& threadPair = (*tIt);
+	for(auto fIt = threadPair.second.begin(); fIt != threadPair.second.end(); fIt++) {
+	    // In our mongodb schema, each document identifies a certain run. This run will have a threadid and
+	    // a function name. There may be different runs for a certain function and thus we will create a document
+	    // for each function and not for each thread. so our mongo collection could be like :
+	    // (threadid = 1, function = abc, ...), (threadid = 1, function = edf). We have reducndant data in the
+	    // thread id, but that's why use are using nosql databse.
+	    auto builder = bsoncxx::builder::stream::document{}; // we create a new document for each function not just for each thread
+	    //bsoncxx::document::value metricDocValue, varDocValue, scopeDocValue;
+	    size_t threadIDHash = idHasher(threadPair.first);
+	    builder << "thread" << threadIDHash;
+	    builder << "codeId" << coiId;
+	    builder << "runId" << runId;
+	    auto& funcPair = (*fIt);
+
+	    builder << "func" << funcPair.first;
+	    auto scopesArr = array{};
+	    for(auto sIt = funcPair.second.begin(); sIt != funcPair.second.end(); sIt++) {
+		auto& scopePair = (*sIt);
+		document scopeDoc{};
+		scopeDoc << "scope" << scopePair.first;
+		// Iterates over metrics and serializes them
+		array metricsArr{};
+		// The start stop and trip captures are used here to bundle them with the metrics. All other captures will
+		// be stored in the json vars array.
+		auto& loopStartCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_start_"];
+		auto& loopStopCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_end_"];
+		auto& loopTripCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_trip_count_"];
+		auto lsIt = loopStartCaps.begin();
+		auto lpIt = loopStopCaps.begin();
+		auto ltIt = loopTripCaps.begin();
+		for(auto mIt = scopePair.second.begin(); mIt != scopePair.second.end(); mIt++,lsIt++,lpIt++,ltIt++) {
+		    auto metricSubDoc = document{}; // opens a document for each metric entry
+		    metricSubDoc << "value" << (*mIt);
+		    if(lsIt!=loopStartCaps.end() ) {
+			metricSubDoc << "start" << (*lsIt);
+			metricSubDoc << "stop" << (*lpIt);
+			metricSubDoc << "count" << (*ltIt);
+		    }
+		    auto metricDocValue = metricSubDoc << finalize;
+		    metricsArr << metricDocValue;
+		}
+		scopeDoc << "metrics" <<  metricsArr;
+
+		// Iterates over the captured vars and serilaizes them
+		array varsArr{};
+		auto& varCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first];
+		for(auto vIt = varCaps.begin(); vIt != varCaps.end(); vIt++) {
+		    std::string varName = (*vIt).first; // only serializes the variables that are not start, stop or trip count
+		    if(varName != "_sope_loop_start_" && varName!="_sope_loop_end_" && varName !="_sope_loop_trip_count_") {
+			auto varDoc = document{}; // opens an array for each metric entry
+			array varValuesArr{}; // the array of values that a certain variable takes
+			for(auto captureVarIt = (*vIt).second.begin() ; captureVarIt!=(*vIt).second.end(); captureVarIt++){
+			    varValuesArr << *captureVarIt;
+			}
+			varDoc << (*vIt).first << varValuesArr; //opens an array to store all value for each variable
+			auto varDocValue = varDoc << finalize;
+			varsArr << varDocValue;
+		    }
+		}
+		scopeDoc << "vars" << varsArr;
+		auto scopeDocValue = scopeDoc << finalize;
+		scopesArr << scopeDocValue;
+	    }
+	    bsoncxx::document::value doc = builder << "scopes" << scopesArr << finalize;
+	    //std::cout << bsoncxx::to_json(doc) << std::endl;
+	    docs.push_back(doc);
+	}
+    }
+    std::cout << " Inserting " << docs.size() << " documents" << std::endl;
+    //db.run_command();
+    collection.insert_many(docs);
+    //return datapointsJson;
+}
+
+using CapturesMap = std::map<std::string,std::vector<std::string>>;
+//template<typename T>
+bsoncxx::builder::stream::array chunkVarsArray(std::map<std::string,std::vector<std::string>>::iterator& varIt, std::vector<std::string>::iterator& valueIt, CapturesMap& varCaps, int limit) {
+    using namespace bsoncxx::builder::stream;
+    array varsArr{};
+    int varsPerRecord = 0;
+    while(varIt != varCaps.end()) {
+	std::string varName = (*varIt).first; // only serializes the variables that are not start, stop or trip count
+	if(varName != "_sope_loop_start_" && varName!="_sope_loop_end_" && varName !="_sope_loop_trip_count_") {
+	    //while(valueIt!=(*varIt).second.end()) { // this keep looping over the array of values until we process all elements. We need it since the next or
+		auto varDoc = document{}; // opens an array for each metric entry
+		array varValuesArr{}; // the array of values that a certain variable takes
+		auto& valuesVec = (*varIt).second;
+		for( ; (varsPerRecord != limit && valueIt!=valuesVec.end()); valueIt++) {
+		    varValuesArr << *valueIt;
+		    varsPerRecord++;
+		}
+		varDoc << (*varIt).first << varValuesArr; //opens an array to store all value for each variable
+		auto varDocValue = varDoc << finalize;
+		varsArr << varDocValue;
+		if(valueIt==valuesVec.end()) {// in the case the inner loop finishes awe need to return. In this case we need to increment the iterator of the outer loop before we return to keep things in order since we will not reach the varIt increment at the end of the while loop
+		    varIt++;
+		    if(varIt!=varCaps.end()) {
+			valueIt = valuesVec.begin();
+		    }
+		    return varsArr;
+		}
+	    //}
+	}
+	varIt++;
+	// this is needed when we are ignoring the _start, _stop, _trip variables. We need to set the valueIt to the next
+	// variable's value array.
+	if(varIt!=varCaps.end()) {
+	    valueIt = (*varIt).second.begin();
+	}
+    }
+    return varsArr;
+}
+
+template<typename T>
+void serialize1kDatapointsToMongo(Stops<T>& metricStops, Captures<T>& varCaptures, int coiId, int runId) {
+    int docsLimit = 2000;
+    using namespace bsoncxx::builder::stream;
+    using bsoncxx::builder::stream::array;
+    using bsoncxx::builder::stream::open_document;
+    using bsoncxx::builder::stream::open_array;
+    using bsoncxx::builder::stream::close_document;
+    using bsoncxx::builder::stream::close_array;
+    mongocxx::uri dbUri{"mongodb://172.17.0.2:27017"};
+    mongocxx::client client(dbUri);
+    mongocxx::database db = client["sope"];
+    mongocxx::collection collection = db["metrics"];
+    std::vector<bsoncxx::document::value> docs;
+    std::hash<std::thread::id> idHasher;
+    for(auto tIt = metricStops.begin(); tIt !=  metricStops.end(); tIt++) {
+	auto& threadPair = (*tIt);
+	for(auto fIt = threadPair.second.begin(); fIt != threadPair.second.end(); fIt++) {
+	    // In our mongodb schema, each document identifies a certain run. This run will have a threadid and
+	    // a function name. There may be different runs for a certain function and thus we will create a document
+	    // for each function and not for each thread. so our mongo collection could be like :
+	    // (threadid = 1, function = abc, ...), (threadid = 1, function = edf). We have reducndant data in the
+	    // thread id, but that's why use are using nosql databse.
+	    auto builder = bsoncxx::builder::stream::document{}; // we create a new document for each function not just for each thread
+	    //bsoncxx::document::value metricDocValue, varDocValue, scopeDocValue;
+	    long int threadIDHash = idHasher(threadPair.first); // monogocxx compained that it cant append siz_t to its bson. so had to assign the hash to int
+	    builder << "thread" << threadIDHash;
+	    builder << "codeId" << coiId;
+	    builder << "runId" << runId;
+	    auto& funcPair = (*fIt);
+
+	    builder << "func" << funcPair.first;
+	    for(auto sIt = funcPair.second.begin(); sIt != funcPair.second.end(); sIt++) {
+		auto& scopePair = (*sIt);
+		document scopeDoc{};
+		scopeDoc << "scope" << scopePair.first;
+		// Iterates over metrics and serializes them
+		//array metricsArr{};
+		// The start stop and trip captures are used here to bundle them with the metrics. All other captures will
+		// be stored in the json vars array.
+		auto& loopStartCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_start_"];
+		auto& loopStopCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_end_"];
+		auto& loopTripCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first]["_sope_loop_trip_count_"];
+		auto lsIt = loopStartCaps.begin();
+		auto lpIt = loopStopCaps.begin();
+		auto ltIt = loopTripCaps.begin();
+		// Initialize iters here since we will break at every 1000 metrics and vars and continue using the same iterators.
+		// The for loops below have no init statement if you check
+		auto mIt = scopePair.second.begin();
+		auto& varCaps = varCaptures[threadPair.first][funcPair.first][scopePair.first];
+		auto varIt = varCaps.begin();
+		auto &valuesVec = (*varIt).second;
+		auto valueIt = valuesVec.begin() ;
+		int chunkNumber = 0;
+		while(mIt!=scopePair.second.end()) { // assuming vars and metrics have similar sizes
+		    array metricsArr{};
+		    int metricsPerRecord = 0; // restrict it to 1000 to keep the docuemnt within the 16MB bson limit for mongo
+		    int varsPerRecord = 0;
+		    for( ; (metricsPerRecord!=docsLimit && mIt != scopePair.second.end()); mIt++) {
+			auto metricSubDoc = document{}; // opens a document for each metric entry
+			metricSubDoc << "value" << (*mIt);
+			if(lsIt!=loopStartCaps.end()) {
+			    metricSubDoc << "start" << (*lsIt);
+			    metricSubDoc << "stop" << (*lpIt);
+			    metricSubDoc << "count" << (*ltIt);
+			    lsIt++;lpIt++;ltIt++;
+			}
+			auto metricDocValue = metricSubDoc << finalize;
+			metricsArr << metricDocValue;
+			metricsPerRecord++;
+		    }
+		    scopeDoc << "metrics" <<  metricsArr;
+
+		    // Iterates over the captured vars and serilaizes them
+		    array varsArr = chunkVarsArray(varIt, valueIt, varCaps, docsLimit);
+
+		    scopeDoc << "vars" << varsArr;
+		    scopeDoc << "n" << chunkNumber;
+		    // just in case. the builder is empty after it is used/finalized the first time.
+		    scopeDoc << "thread" << threadIDHash;
+		    scopeDoc << "codeId" << coiId;
+		    scopeDoc << "runId" << runId;
+		    scopeDoc << "func" << funcPair.first;
+		    scopeDoc << "scope" << scopePair.first;
+		    auto scopeDocValue = scopeDoc << finalize;
+		    bsoncxx::document::value doc = builder << concatenate(scopeDocValue.view()) << finalize;
+		    /*if(chunkNumber>243) {
+			std::cout << bsoncxx::to_json(doc.view()) << std::endl;
+		    }*/
+		    try {
+			/*if(chunkNumber==121) {
+			    //std::cout << bsoncxx::to_json(doc.view()) << std::endl;
+			    FileSystem::File f("n121.json");
+			    f.open(FileSystem::File::out, FileSystem::File::text);
+			    if(f.isGood())
+				f.putLine(bsoncxx::to_json(doc.view()), false);
+			}*/
+			//if(chunkNumber%2==0)
+			    bsoncxx::stdx::optional<mongocxx::result::insert_one> res = collection.insert_one(doc.view());
+		    }
+		    catch(std::exception& e ) {
+			std::cout << e.what() << std::endl;
+		    }
+
+		    //docs.push_back(doc);
+		    chunkNumber++;
+		}
+	    }
+	}
+    }
+    //std::cout << " Inserting " << docs.size() << " documents" << std::endl;
+    //collection.insert_many(docs);
 }
 
 template<typename T>
@@ -201,6 +527,7 @@ json CaptureDB<T>::serializeAllDatapointsWithKeys() {
         threadsJson.push_back(threadJson);
     }
     datapointsJson["threads"] = threadsJson;
+    datapointsJson["codeId"] = cId;
     datapointsJson["runId"] = rId;
     //std::cout << capturesJson << std::endl;
     //std::cout << datapointsJson << std::endl;
@@ -210,19 +537,27 @@ json CaptureDB<T>::serializeAllDatapointsWithKeys() {
 
 template<typename T>
 CaptureDB<T>::~CaptureDB() {
-    json stats = serializeStatisticsWithKeys();
-    json dps = serializeAllDatapointsWithKeys();
+    //json stats = serializeStatisticsWithKeys();
+    //json dps = serializeAllDatapointsWithKeys();
     std::string statspath = "";
     std::string dpspath = "";
+    int uniqueRunId = -1;
     // create unique filenames and then check if they exist or not
     do {
         int uniqueId = generateUniqueId();
+	uniqueRunId = uniqueId;
         statspath = "./db_min_avg_max_" + std::to_string(uniqueId) + ".json";
         dpspath = "./db_all_dps_" + std::to_string(uniqueId) + ".json";
     } while(FileSystem::File::exists(statspath) && FileSystem::File::exists(dpspath));
     // now create the files
-    createJsonFile(statspath, stats);
-    createJsonFile(dpspath, dps);
+    //createJsonFile(statspath, stats);
+    //createJsonFile(dpspath, dps);
+    // store the HUGE json file in mongo GridFS
+    //writeToGridFS(dpspath);
+    // serialize to mongo. This is useless when the run is huge. we will exceed the 16MB bson size easily to 200 MB
+    //serializeAllDatapointsToMongo<T>(unitInnerMetricStop, variableCaptures, uniqueRunId);
+    // serialzie to mongo in chunks
+    serialize1kDatapointsToMongo<T>(unitInnerMetricStop, variableCaptures, cId, /*uniqueRunId*/ rId);
 }
 
 template<typename T>

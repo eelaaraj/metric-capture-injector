@@ -22,11 +22,14 @@ using namespace llvm;
 
 static llvm::cl::OptionCategory InjectorPassCategory("Injector Pass");
 static llvm::cl::opt<std::string> functionNamesCommaSeperated("functions", llvm::cl::cat(InjectorPassCategory));
+static llvm::cl::opt<std::string> codeIDsCommaSeperated("code-ids", llvm::cl::cat(InjectorPassCategory));
 
 namespace {
 struct InjectorPass : public FunctionPass {
     static char ID;
     std::vector<std::string> functions;
+    std::vector<int> codeIDs;
+    std::map<std::string, int> functionCodeIds;
     InjectorPass() : FunctionPass(ID) {}
 
     void insertCleanupBlock(BasicBlock* returnBlock, Function* cleanupCall, CallInst* metric_setup_call, IRBuilder<>& builder) {
@@ -113,14 +116,28 @@ struct InjectorPass : public FunctionPass {
     }
 
     virtual bool doInitialization(Module & M) {
+	SmallVector<StringRef, 3> sepFuncStrings;
+	SmallVector<StringRef, 3> sepIdStrings;
         StringRef commaSepStr(functionNamesCommaSeperated.getValue());
         if(!commaSepStr.empty()) {
-            SmallVector<StringRef, 3> sepStrings;
-            commaSepStr.split(sepStrings, StringRef(","));
-            for(auto s: sepStrings) {
+	    commaSepStr.split(sepFuncStrings, StringRef(","));
+	    for(auto s: sepFuncStrings) {
                 functions.push_back(s.str());
             }
         }
+	StringRef commaSepIds(codeIDsCommaSeperated.getValue());
+	if(!commaSepIds.empty()) {
+	    commaSepIds.split(sepIdStrings, StringRef(","));
+	    for(auto s: sepIdStrings) {
+		int id = std::stoi(s.trim().str());
+		codeIDs.push_back(id);
+	    }
+	}
+	if(sepFuncStrings.size() == sepIdStrings.size()) {
+	    for(int i=0; i< sepFuncStrings.size(); i++) {
+		functionCodeIds[functions[i]] = codeIDs[i];
+	    }
+	}
         return false;
     }
 
@@ -191,9 +208,23 @@ struct InjectorPass : public FunctionPass {
     virtual bool runOnFunction(Function& F){
         // Get the function to call from our runtime library.
         std::string functionName = F.getName().str();
-        std::function<bool(const std::string&)> predicate = [&functionName](const std::string& vectorElement) {
+	/*
+	std::function<bool(const std::string&)> predicate = [&functionName](const std::string& vectorElement) {
             return functionName.find(vectorElement)!=std::string::npos; };
-        bool funcFound = (!functions.empty() && std::find_if(functions.begin(), functions.end(), predicate)!=functions.end());
+	bool funcFound = (!functions.empty() && std::find_if(functions.begin(), functions.end(), predicate)!=functions.end());
+	*/
+
+	std::function<bool(const std::pair<std::string,int>&)> mapPredicate = [&functionName](const std::pair<std::string,int>& mapElement) {
+	    return functionName.find(mapElement.first)!=std::string::npos; };
+	bool funcFound = false;
+	int codeID = -1;
+	if(!functionCodeIds.empty()) {
+	    std::map<std::string, int>::iterator foundAt = std::find_if(functionCodeIds.begin(), functionCodeIds.end(), mapPredicate);
+	    if(foundAt!=functionCodeIds.end()) {
+		codeID = foundAt->second;
+		funcFound = true;
+	    }
+	}
 
         if(funcFound) {
             //F.dump();
@@ -462,7 +493,8 @@ struct InjectorPass : public FunctionPass {
             void_91_params.push_back(ptr_funcName);
             ConstantInt* ptr_loop_count = ConstantInt::get(IntegerType::get(Ctx,32), 5);
             void_91_params.push_back(ptr_loop_count);
-            void_91_params.push_back(ptr_loop_count);
+	    ConstantInt* ptr_code_id = ConstantInt::get(IntegerType::get(Ctx,32), codeID);
+	    void_91_params.push_back(ptr_code_id);
 
             //std::cerr << "File name = " <<  F.getParent()->getName().str() << std::endl;
             //std::cerr << "Function name = " << F.getName().str() << std::endl;
