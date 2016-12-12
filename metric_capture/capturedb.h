@@ -557,7 +557,7 @@ CaptureDB<T>::~CaptureDB() {
     // serialize to mongo. This is useless when the run is huge. we will exceed the 16MB bson size easily to 200 MB
     //serializeAllDatapointsToMongo<T>(unitInnerMetricStop, variableCaptures, uniqueRunId);
     // serialzie to mongo in chunks
-    serialize1kDatapointsToMongo<T>(unitInnerMetricStop, variableCaptures, cId, /*uniqueRunId*/ rId);
+    //serialize1kDatapointsToMongo<T>(unitInnerMetricStop, variableCaptures, cId, /*uniqueRunId*/ rId);
 }
 
 template<typename T>
